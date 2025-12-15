@@ -1,0 +1,560 @@
+{
+	"info": {
+		"_postman_id": "email-api-collection-2025",
+		"name": "Multi-Tenant Email API",
+		"description": "Complete API collection for Laravel 11 multi-tenant email service with custom template management.\n\n**Features:**\n- Send emails with custom templates\n- Create and manage email templates\n- Multi-domain support (MenuVire, FitVire)\n- Template preview functionality\n- Brand-specific designs\n\n**Author:** Savindu Shenal\n**Version:** 1.0.0\n**Date:** December 15, 2025",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"health"
+							]
+						},
+						"description": "Check if the API is running and healthy. No authentication required."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Email Sending",
+			"item": [
+				{
+					"name": "Send Email - MenuVire Welcome",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"domain\": \"menuvire.com\",\n    \"to\": \"user@example.com\",\n    \"template\": \"welcome\",\n    \"data\": {\n        \"user_name\": \"John Doe\",\n        \"platform_name\": \"MenuVire\",\n        \"verification_link\": \"https://app.menuvire.com/verify/abc123\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/email/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"send"
+							]
+						},
+						"description": "Send a welcome email using MenuVire's template."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Email - FitVire Password Reset",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{fitvire_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"domain\": \"fitvire.com\",\n    \"to\": \"member@example.com\",\n    \"template\": \"password-reset\",\n    \"data\": {\n        \"user_name\": \"Jane Smith\",\n        \"platform_name\": \"FitVire\",\n        \"reset_link\": \"https://app.fitvire.com/reset/xyz789\",\n        \"expires_at\": \"1 hour\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/email/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"send"
+							]
+						},
+						"description": "Send a password reset email using FitVire's template."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Email - MenuVire Invoice",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"domain\": \"menuvire.com\",\n    \"to\": \"customer@example.com\",\n    \"template\": \"invoice-notification\",\n    \"data\": {\n        \"customer_name\": \"Alice Johnson\",\n        \"invoice_number\": \"INV-2025-001\",\n        \"amount\": 1250.50,\n        \"due_date\": \"January 15, 2026\",\n        \"payment_link\": \"https://menuvire.com/invoices/pay/001\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/email/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"send"
+							]
+						},
+						"description": "Send an invoice notification using custom template."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Email - OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"domain\": \"menuvire.com\",\n    \"to\": \"user@example.com\",\n    \"template\": \"otp\",\n    \"data\": {\n        \"user_name\": \"Mike Wilson\",\n        \"platform_name\": \"MenuVire\",\n        \"otp_code\": \"847293\",\n        \"expires_in\": \"10 minutes\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/email/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"send"
+							]
+						},
+						"description": "Send an OTP verification email."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Template Management",
+			"item": [
+				{
+					"name": "List All Templates - MenuVire",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/email/templates",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates"
+							]
+						},
+						"description": "List all templates for MenuVire domain."
+					},
+					"response": []
+				},
+				{
+					"name": "List All Templates - FitVire",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{fitvire_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/email/templates",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates"
+							]
+						},
+						"description": "List all templates for FitVire domain."
+					},
+					"response": []
+				},
+				{
+					"name": "List Templates by Category",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/email/templates?category=transactional",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates"
+							],
+							"query": [
+								{
+									"key": "category",
+									"value": "transactional",
+									"description": "Options: authentication, notification, transactional, marketing, system"
+								}
+							]
+						},
+						"description": "Filter templates by category."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Single Template",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/email/templates/invoice-notification",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates",
+								"invoice-notification"
+							]
+						},
+						"description": "Get details of a specific template including HTML and variables."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Template - Order Confirmation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"template_key\": \"order-confirmation\",\n    \"category\": \"transactional\",\n    \"description\": \"Order confirmation email for restaurant orders\",\n    \"subject\": \"Order #{{ $order_number }} Confirmed - {{ $restaurant_name }}\",\n    \"blade_html\": \"<!DOCTYPE html><html><head><style>body{font-family:Arial,sans-serif;color:#333}.container{max-width:600px;margin:0 auto;padding:20px}.header{background:#FF6B6B;color:white;padding:30px;text-align:center}.order-details{background:#f9f9f9;padding:20px;margin:20px 0;border-radius:8px}.button{display:inline-block;padding:12px 30px;background:#FF6B6B;color:white;text-decoration:none;border-radius:5px}</style></head><body><div class='container'><div class='header'><h1>🍽️ Order Confirmed!</h1></div><div class='order-details'><h2>Hi {{ $customer_name }},</h2><p>Your order #{{ $order_number }} at <strong>{{ $restaurant_name }}</strong> has been confirmed!</p><p><strong>Order Total:</strong> ${{ $total_amount }}</p><p><strong>Estimated Delivery:</strong> {{ $delivery_time }}</p></div><div style='text-align:center;margin:30px 0'><a href='{{ $tracking_link }}' class='button'>Track Order</a></div><p style='text-align:center;color:#666;font-size:14px'>Thank you for choosing MenuVire!</p></div></body></html>\",\n    \"variables\": [\n        {\n            \"name\": \"customer_name\",\n            \"type\": \"string\",\n            \"description\": \"Customer's full name\",\n            \"required\": true\n        },\n        {\n            \"name\": \"order_number\",\n            \"type\": \"string\",\n            \"description\": \"Order number/ID\",\n            \"required\": true\n        },\n        {\n            \"name\": \"restaurant_name\",\n            \"type\": \"string\",\n            \"description\": \"Restaurant name\",\n            \"required\": true\n        },\n        {\n            \"name\": \"total_amount\",\n            \"type\": \"number\",\n            \"description\": \"Order total amount\",\n            \"required\": true\n        },\n        {\n            \"name\": \"delivery_time\",\n            \"type\": \"string\",\n            \"description\": \"Estimated delivery time\",\n            \"required\": true\n        },\n        {\n            \"name\": \"tracking_link\",\n            \"type\": \"url\",\n            \"description\": \"Order tracking URL\",\n            \"required\": true\n        }\n    ],\n    \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/email/templates",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates"
+							]
+						},
+						"description": "Create a new email template with variables and validation."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Template - Workout Reminder (FitVire)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{fitvire_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"template_key\": \"workout-reminder\",\n    \"category\": \"notification\",\n    \"description\": \"Daily workout reminder for FitVire members\",\n    \"subject\": \"⚡ Time to Train, {{ $user_name }}!\",\n    \"blade_html\": \"<!DOCTYPE html><html><head><style>body{font-family:Arial,sans-serif;margin:0;background:#0A0E27}.container{max-width:600px;margin:0 auto;background:#fff}.header{background:linear-gradient(135deg,#00D4FF,#7B2FF7);padding:40px;text-align:center}.header h1{color:#fff;margin:0;font-size:32px;font-weight:900;text-transform:uppercase}.content{padding:30px}.workout-card{background:linear-gradient(135deg,#E0F7FF,#F0E7FF);padding:25px;border-radius:15px;margin:20px 0}.button{display:inline-block;padding:18px 45px;background:linear-gradient(135deg,#00D4FF,#7B2FF7);color:#fff;text-decoration:none;border-radius:30px;font-weight:bold;text-transform:uppercase}</style></head><body><div class='container'><div class='header'><h1>⚡ FITVIRE ⚡</h1><p style='color:#fff;font-size:18px;margin:10px 0 0 0'>YOUR DAILY WORKOUT AWAITS</p></div><div class='content'><div class='workout-card'><h2 style='color:#0099FF;margin:0 0 15px 0'>Hey {{ $user_name }}! 💪</h2><p style='color:#334155;font-size:16px'>It's time to crush today's workout:</p><h3 style='color:#7B2FF7;margin:20px 0 10px 0'>{{ $workout_name }}</h3><p style='color:#64748B'>Duration: {{ $duration }} minutes</p><p style='color:#64748B'>Difficulty: {{ $difficulty }}</p></div><p style='text-align:center;margin:30px 0'><a href='{{ $workout_link }}' class='button'>START WORKOUT</a></p><p style='text-align:center;color:#94A3B8;font-size:14px'>Keep pushing your limits! 🔥</p></div></div></body></html>\",\n    \"variables\": [\n        {\n            \"name\": \"user_name\",\n            \"type\": \"string\",\n            \"description\": \"Member's first name\",\n            \"required\": true\n        },\n        {\n            \"name\": \"workout_name\",\n            \"type\": \"string\",\n            \"description\": \"Name of the workout\",\n            \"required\": true\n        },\n        {\n            \"name\": \"duration\",\n            \"type\": \"number\",\n            \"description\": \"Workout duration in minutes\",\n            \"required\": true\n        },\n        {\n            \"name\": \"difficulty\",\n            \"type\": \"string\",\n            \"description\": \"Workout difficulty level\",\n            \"required\": true\n        },\n        {\n            \"name\": \"workout_link\",\n            \"type\": \"url\",\n            \"description\": \"Link to start workout\",\n            \"required\": true\n        }\n    ],\n    \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/email/templates",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates"
+							]
+						},
+						"description": "Create a FitVire-branded workout reminder template."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Template",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"subject\": \"Updated Subject Line - Order #{{ $order_number }}\",\n    \"description\": \"Updated description for order confirmation template\",\n    \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/email/templates/order-confirmation",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates",
+								"order-confirmation"
+							]
+						},
+						"description": "Update an existing template's properties."
+					},
+					"response": []
+				},
+				{
+					"name": "Preview Template",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"data\": {\n        \"customer_name\": \"Preview User\",\n        \"invoice_number\": \"INV-PREVIEW-001\",\n        \"amount\": 999.99,\n        \"due_date\": \"December 31, 2025\",\n        \"payment_link\": \"https://menuvire.com/pay/preview\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/email/templates/invoice-notification/preview",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates",
+								"invoice-notification",
+								"preview"
+							]
+						},
+						"description": "Preview a template with sample data to see how it renders."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Template",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/email/templates/order-confirmation",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"templates",
+								"order-confirmation"
+							]
+						},
+						"description": "Delete a template permanently."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Statistics",
+			"item": [
+				{
+					"name": "Get Email Stats - MenuVire",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{menuvire_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/email/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"stats"
+							]
+						},
+						"description": "Get email sending statistics for MenuVire domain."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Email Stats - FitVire",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{fitvire_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/email/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"email",
+								"stats"
+							]
+						},
+						"description": "Get email sending statistics for FitVire domain."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8001",
+			"type": "string"
+		},
+		{
+			"key": "menuvire_api_key",
+			"value": "eak_fu5NuRBJQEoXmdGHfjley03jMBCmw94IU66t6Uec",
+			"type": "string"
+		},
+		{
+			"key": "fitvire_api_key",
+			"value": "eak_JDxGOSFFVLssRviunHUM1iuKUuL11627vmX4b4GU",
+			"type": "string"
+		}
+	]
+}
