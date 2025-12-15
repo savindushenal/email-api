@@ -1,0 +1,53 @@
+name: Deploy to cPanel via Git Pull
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy via SSH and Git Pull
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.CPANEL_SSH_HOST }}
+          username: ${{ secrets.CPANEL_SSH_USERNAME }}
+          password: ${{ secrets.CPANEL_SSH_PASSWORD }}
+          port: ${{ secrets.CPANEL_SSH_PORT }}
+          script: |
+            # Navigate to application directory
+            cd ${{ secrets.CPANEL_APP_PATH }}
+            
+            # Enable maintenance mode
+            php artisan down || echo "Already in maintenance mode"
+            
+            # Pull latest changes
+            git pull origin main
+            
+            # Install/update dependencies
+            composer install --no-dev --optimize-autoloader --no-interaction
+            
+            # Run migrations
+            php artisan migrate --force
+            
+            # Clear and cache configs
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan route:clear
+            php artisan view:clear
+            
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            
+            # Set permissions
+            chmod -R 755 storage bootstrap/cache
+            
+            # Disable maintenance mode
+            php artisan up
+            
+            echo "Deployment completed successfully!"
