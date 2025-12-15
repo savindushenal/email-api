@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\EmailController;
+use App\Http\Controllers\Api\TemplateController;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,4 +26,14 @@ Route::middleware(['api.key', 'throttle:60,1'])->group(function () {
     
     // Get statistics
     Route::get('/email/stats', [EmailController::class, 'stats']);
+    
+    // Template management
+    Route::prefix('email/templates')->group(function () {
+        Route::get('/', [TemplateController::class, 'index']);                    // List all templates
+        Route::post('/', [TemplateController::class, 'store']);                   // Create new template
+        Route::get('/{templateKey}', [TemplateController::class, 'show']);        // Get single template
+        Route::put('/{templateKey}', [TemplateController::class, 'update']);      // Update template
+        Route::delete('/{templateKey}', [TemplateController::class, 'destroy']);  // Delete template
+        Route::post('/{templateKey}/preview', [TemplateController::class, 'preview']); // Preview template
+    });
 });

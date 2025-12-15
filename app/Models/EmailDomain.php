@@ -129,7 +129,8 @@ class EmailDomain extends Model
      */
     public function scopeByApiKey($query, string $apiKey)
     {
-        return $query->where('api_key', $apiKey);
+        // Hash the API key to compare with stored hash
+        return $query->where('api_key', hash('sha256', $apiKey));
     }
 
     /**

@@ -1,0 +1,29 @@
+{
+  "template_key": "brand-welcome",
+  "category": "authentication",
+  "description": "MenuVire branded welcome email with restaurant theme",
+  "subject": "Welcome to MenuVire - Let's Build Your Menu!",
+  "blade_html": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:0;background-color:#f5f5f5}.container{max-width:600px;margin:0 auto;background:#fff}.header{background:linear-gradient(135deg,#FF6B6B 0%,#FF8E53 100%);padding:40px 20px;text-align:center}.header h1{color:#fff;margin:0;font-size:32px;text-shadow:2px 2px 4px rgba(0,0,0,0.2)}.content{padding:40px 30px}.welcome-badge{background:#FFF4E6;border-left:4px solid #FF6B6B;padding:20px;margin:20px 0;border-radius:4px}.button{display:inline-block;padding:15px 40px;background:#FF6B6B;color:#fff;text-decoration:none;border-radius:25px;font-weight:bold;box-shadow:0 4px 15px rgba(255,107,107,0.3)}.button:hover{background:#FF8E53}.features{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:30px 0}.feature-box{background:#FFF4E6;padding:15px;border-radius:8px;text-align:center}.footer{background:#2D3748;color:#fff;padding:30px;text-align:center;font-size:14px}</style></head><body><div class=\"container\"><div class=\"header\"><h1>🍽️ Welcome to MenuVire</h1><p style=\"color:#fff;font-size:18px;margin:10px 0 0 0\">Your Restaurant's Digital Menu Platform</p></div><div class=\"content\"><div class=\"welcome-badge\"><h2 style=\"color:#FF6B6B;margin:0 0 10px 0\">Hi {{ $user_name }}! 👋</h2><p style=\"margin:0;color:#666\">Welcome to the MenuVire family! We're excited to help you create beautiful digital menus for your restaurant.</p></div><p style=\"font-size:16px;line-height:1.6;color:#333\">Get started by verifying your email address and exploring our platform:</p><div class=\"features\"><div class=\"feature-box\">📱<br><strong>QR Code Menus</strong></div><div class=\"feature-box\">🎨<br><strong>Custom Designs</strong></div><div class=\"feature-box\">📊<br><strong>Analytics</strong></div><div class=\"feature-box\">🌐<br><strong>Multi-Language</strong></div></div><p style=\"text-align:center;margin:40px 0\"><a href=\"{{ $verification_link }}\" class=\"button\">Verify Email & Get Started</a></p><p style=\"color:#666;font-size:14px;text-align:center\">This link expires in {{ $expires_at ?? '24 hours' }}</p></div><div class=\"footer\"><p style=\"margin:0 0 10px 0\">© {{ date('Y') }} MenuVire | Restaurant Menu Solutions</p><p style=\"margin:0;color:#A0AEC0\">Need help? Contact us at support@menuvire.com</p></div></div></body></html>",
+  "variables": [
+    {
+      "name": "user_name",
+      "type": "string",
+      "description": "Restaurant owner's name",
+      "required": true
+    },
+    {
+      "name": "verification_link",
+      "type": "url",
+      "description": "Email verification URL",
+      "required": true
+    },
+    {
+      "name": "expires_at",
+      "type": "string",
+      "description": "Link expiration time",
+      "required": false,
+      "default": "24 hours"
+    }
+  ],
+  "status": "active"
+}

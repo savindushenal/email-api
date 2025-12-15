@@ -1,0 +1,40 @@
+{
+  "template_key": "invoice-notification",
+  "category": "transactional",
+  "description": "Invoice notification with payment details",
+  "subject": "Invoice #{{ $invoice_number }} - ${{ $amount }} Due",
+  "blade_html": "<!DOCTYPE html><html><head><style>body{font-family:Arial,sans-serif;color:#333}.container{max-width:600px;margin:0 auto;padding:20px}.header{background:#3B82F6;color:white;padding:20px;text-align:center}.button{display:inline-block;padding:12px 30px;background:#3B82F6;color:white;text-decoration:none;border-radius:5px}</style></head><body><div class=\"container\"><div class=\"header\"><h1>Invoice</h1></div><p>Hi {{ $customer_name }},</p><p>Your invoice #{{ $invoice_number }} is ready.</p><p><strong>Amount Due:</strong> ${{ $amount }}</p><p><strong>Due Date:</strong> {{ $due_date }}</p><p style=\"text-align:center;margin:30px 0\"><a href=\"{{ $payment_link }}\" class=\"button\">Pay Now</a></p><p>Thank you for your business!</p></div></body></html>",
+  "variables": [
+    {
+      "name": "customer_name",
+      "type": "string",
+      "description": "Customer's full name",
+      "required": true
+    },
+    {
+      "name": "invoice_number",
+      "type": "string",
+      "description": "Unique invoice number",
+      "required": true
+    },
+    {
+      "name": "amount",
+      "type": "number",
+      "description": "Invoice amount in dollars",
+      "required": true
+    },
+    {
+      "name": "due_date",
+      "type": "date",
+      "description": "Payment due date",
+      "required": true
+    },
+    {
+      "name": "payment_link",
+      "type": "url",
+      "description": "URL to payment page",
+      "required": true
+    }
+  ],
+  "status": "active"
+}

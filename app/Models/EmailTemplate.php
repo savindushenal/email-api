@@ -14,13 +14,17 @@ class EmailTemplate extends Model
     protected $fillable = [
         'domain_id',
         'template_key',
+        'category',
+        'description',
         'subject',
         'blade_html',
+        'variables',
         'status',
     ];
 
     protected $casts = [
         'domain_id' => 'integer',
+        'variables' => 'array',
     ];
 
     /**
