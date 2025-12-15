@@ -1,0 +1,274 @@
+{
+  "info": {
+    "name": "Email API - Multi-Tenant Email Service",
+    "_postman_id": "email-api-collection",
+    "description": "Complete API collection for the Multi-Tenant Email Sending Service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost/api",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "eak_your_api_key_here",
+      "type": "string"
+    },
+    {
+      "key": "domain",
+      "value": "menuvire.com",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        },
+        "description": "Check if the Email API is running. No authentication required."
+      },
+      "response": []
+    },
+    {
+      "name": "Send OTP Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"domain\": \"{{domain}}\",\n  \"template\": \"otp\",\n  \"to\": \"user@example.com\",\n  \"data\": {\n    \"name\": \"John Doe\",\n    \"otp\": \"492031\",\n    \"minutes\": 5\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/email/send",
+          "host": ["{{base_url}}"],
+          "path": ["email", "send"]
+        },
+        "description": "Send an OTP (One-Time Password) email to a user"
+      },
+      "response": []
+    },
+    {
+      "name": "Send Welcome Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"domain\": \"{{domain}}\",\n  \"template\": \"welcome\",\n  \"to\": \"newuser@example.com\",\n  \"data\": {\n    \"name\": \"Jane Smith\",\n    \"appName\": \"MenuVire\",\n    \"loginUrl\": \"https://menuvire.com/login\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/email/send",
+          "host": ["{{base_url}}"],
+          "path": ["email", "send"]
+        },
+        "description": "Send a welcome email to a new user"
+      },
+      "response": []
+    },
+    {
+      "name": "Send Invoice Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"domain\": \"{{domain}}\",\n  \"template\": \"invoice\",\n  \"to\": \"customer@example.com\",\n  \"data\": {\n    \"name\": \"ABC Company\",\n    \"invoiceNumber\": \"INV-2023-001\",\n    \"amount\": \"$250.00\",\n    \"dueDate\": \"2024-01-15\",\n    \"items\": [\n      {\n        \"description\": \"Premium Subscription\",\n        \"quantity\": 1,\n        \"price\": 200.00\n      },\n      {\n        \"description\": \"Additional Users\",\n        \"quantity\": 5,\n        \"price\": 10.00\n      }\n    ]\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/email/send",
+          "host": ["{{base_url}}"],
+          "path": ["email", "send"]
+        },
+        "description": "Send an invoice email to a customer"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Statistics - Today",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/email/stats?period=today",
+          "host": ["{{base_url}}"],
+          "path": ["email", "stats"],
+          "query": [
+            {
+              "key": "period",
+              "value": "today"
+            }
+          ]
+        },
+        "description": "Get email sending statistics for today"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Statistics - Week",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/email/stats?period=week",
+          "host": ["{{base_url}}"],
+          "path": ["email", "stats"],
+          "query": [
+            {
+              "key": "period",
+              "value": "week"
+            }
+          ]
+        },
+        "description": "Get email sending statistics for this week"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Statistics - Month",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/email/stats?period=month",
+          "host": ["{{base_url}}"],
+          "path": ["email", "stats"],
+          "query": [
+            {
+              "key": "period",
+              "value": "month"
+            }
+          ]
+        },
+        "description": "Get email sending statistics for this month"
+      },
+      "response": []
+    },
+    {
+      "name": "Error - Missing API Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"domain\": \"{{domain}}\",\n  \"template\": \"otp\",\n  \"to\": \"user@example.com\",\n  \"data\": {\n    \"name\": \"Test\",\n    \"otp\": \"123456\",\n    \"minutes\": 5\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/email/send",
+          "host": ["{{base_url}}"],
+          "path": ["email", "send"]
+        },
+        "description": "Example of error when API key is missing (401 Unauthorized)"
+      },
+      "response": []
+    },
+    {
+      "name": "Error - Invalid Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"domain\": \"{{domain}}\",\n  \"template\": \"otp\",\n  \"to\": \"invalid-email\",\n  \"data\": {\n    \"name\": \"Test\",\n    \"otp\": \"123456\",\n    \"minutes\": 5\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/email/send",
+          "host": ["{{base_url}}"],
+          "path": ["email", "send"]
+        },
+        "description": "Example of validation error when email is invalid (422 Unprocessable Entity)"
+      },
+      "response": []
+    },
+    {
+      "name": "Error - Domain Mismatch",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"domain\": \"unauthorized-domain.com\",\n  \"template\": \"otp\",\n  \"to\": \"user@example.com\",\n  \"data\": {\n    \"name\": \"Test\",\n    \"otp\": \"123456\",\n    \"minutes\": 5\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/email/send",
+          "host": ["{{base_url}}"],
+          "path": ["email", "send"]
+        },
+        "description": "Example of error when domain doesn't match API key (403 Forbidden)"
+      },
+      "response": []
+    }
+  ]
+}
