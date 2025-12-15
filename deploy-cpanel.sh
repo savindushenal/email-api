@@ -64,11 +64,17 @@ echo -e "${YELLOW}Step 5: Running database migrations...${NC}"
 php artisan migrate --force
 
 echo -e "${YELLOW}Step 6: Clearing and caching configuration...${NC}"
-php artisan config:clear
-php artisan cache:clear
-php artisan route:clear
-php artisan view:clear
+# Clear cached configs manually to avoid DB access errors
+rm -f bootstrap/cache/config.php
+rm -f bootstrap/cache/routes.php
+rm -f bootstrap/cache/packages.php
+rm -f bootstrap/cache/services.php
 
+# Clear other caches
+php artisan view:clear || rm -rf storage/framework/views/*
+rm -rf storage/framework/cache/data/*
+
+# Rebuild caches
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
