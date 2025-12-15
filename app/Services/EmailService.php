@@ -138,7 +138,10 @@ class EmailService
      */
     protected function configureMailer(EmailDomain $domain): void
     {
-        if ($domain->usesSes()) {
+        $mailConfig = $domain->mail_config ?? [];
+        $transport = $mailConfig['transport'] ?? 'smtp';
+
+        if ($transport === 'ses' && $domain->usesSes()) {
             // Configure SES
             Config::set('mail.default', 'ses');
             Config::set('mail.mailers.ses.transport', 'ses');
@@ -147,11 +150,21 @@ class EmailService
             Config::set('services.ses.key', $domain->ses_key);
             Config::set('services.ses.secret', $domain->ses_secret);
             Config::set('services.ses.region', $domain->ses_region);
+        } elseif ($transport === 'smtp' && isset($mailConfig['host'])) {
+            // Configure custom SMTP for this domain
+            Config::set('mail.default', 'smtp');
+            Config::set('mail.mailers.smtp', [
+                'transport' => 'smtp',
+                'host' => $mailConfig['host'],
+                'port' => $mailConfig['port'] ?? 465,
+                'encryption' => $mailConfig['encryption'] ?? 'ssl',
+                'username' => $mailConfig['username'] ?? null,
+                'password' => $mailConfig['password'] ?? null,
+                'timeout' => null,
+            ]);
         } else {
-            // Use sendmail (default for cPanel)
-            Config::set('mail.default', 'sendmail');
-            Config::set('mail.mailers.sendmail.transport', 'sendmail');
-            Config::set('mail.mailers.sendmail.path', '/usr/sbin/sendmail -bs -i');
+            // Use default SMTP from .env (fallback)
+            Config::set('mail.default', 'smtp');
         }
 
         // Set from address
