@@ -219,4 +219,16 @@ class EmailService
             'start_date' => $startDate->toIso8601String(),
         ];
     }
+
+    /**
+     * Configure mailer for testing purposes.
+     * This is a public wrapper around configureMailer for DomainController.
+     *
+     * @param EmailDomain $domain
+     * @return void
+     */
+    public function configureMailerForTesting(EmailDomain $domain): void
+    {
+        $this->configureMailer($domain);
+    }
 }

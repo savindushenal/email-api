@@ -121,6 +121,18 @@ return [
 
     'key' => env('APP_KEY'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Admin API Key
+    |--------------------------------------------------------------------------
+    |
+    | This key is used for admin operations like creating/managing domains.
+    | Generate with: php -r "echo 'admin_' . bin2hex(random_bytes(32));"
+    |
+    */
+
+    'admin_api_key' => env('ADMIN_API_KEY'),
+
     'cipher' => 'AES-256-CBC',
 
     /*

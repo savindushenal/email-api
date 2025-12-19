@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'api.key' => \App\Http\Middleware\ApiKeyAuthentication::class,
+            'admin.key' => \App\Http\Middleware\AdminApiKey::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

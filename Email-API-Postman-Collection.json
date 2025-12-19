@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "email-api-collection-2025",
 		"name": "Multi-Tenant Email API",
-		"description": "Complete API collection for Laravel 11 multi-tenant email service with custom template management.\n\n**Features:**\n- Send emails with custom templates\n- Create and manage email templates\n- Multi-domain support (MenuVire, FitVire)\n- Template preview functionality\n- Brand-specific designs\n\n**Author:** Savindu Shenal\n**Version:** 1.0.0\n**Date:** December 15, 2025",
+		"description": "Complete API collection for Laravel 11 multi-tenant email service with custom template management.\n\n**Features:**\n- Send emails with custom templates\n- Create and manage email templates\n- Multi-domain support (MenuVire, FitVire)\n- Template preview functionality\n- Brand-specific designs\n- **NEW: Domain Management API (Admin)**\n\n**Author:** Savindu Shenal\n**Version:** 1.1.0\n**Date:** December 19, 2025",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -29,6 +29,394 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "Admin - Domain Management",
+			"item": [
+				{
+					"name": "List All Domains",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains"
+							]
+						},
+						"description": "List all registered domains. Requires admin API key."
+					},
+					"response": []
+				},
+				{
+					"name": "List Domains by Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains?status=active",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "active",
+									"description": "Options: active, inactive, suspended"
+								}
+							]
+						},
+						"description": "Filter domains by status."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Domain Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains/menuvire.com",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains",
+								"menuvire.com"
+							]
+						},
+						"description": "Get detailed information about a specific domain including statistics and mail config status."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Domain - SMTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"domain\": \"newbrand.com\",\n    \"from_email\": \"hello@newbrand.com\",\n    \"from_name\": \"NewBrand\",\n    \"mailer\": \"smtp\",\n    \"daily_limit\": 1000,\n    \"hourly_limit\": 100,\n    \"mail_config\": {\n        \"host\": \"mail.newbrand.com\",\n        \"port\": 465,\n        \"encryption\": \"ssl\",\n        \"username\": \"hello@newbrand.com\",\n        \"password\": \"your_smtp_password\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains"
+							]
+						},
+						"description": "Create a new domain with SMTP configuration. Returns the API key (save it!)."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Domain - Amazon SES",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"domain\": \"sesbrand.com\",\n    \"from_email\": \"noreply@sesbrand.com\",\n    \"from_name\": \"SES Brand\",\n    \"mailer\": \"ses\",\n    \"daily_limit\": 5000,\n    \"hourly_limit\": 500,\n    \"ses_key\": \"AKIAIOSFODNN7EXAMPLE\",\n    \"ses_secret\": \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\",\n    \"ses_region\": \"us-east-1\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains"
+							]
+						},
+						"description": "Create a new domain with Amazon SES configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Domain",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"from_name\": \"Updated Brand Name\",\n    \"daily_limit\": 2000,\n    \"hourly_limit\": 200,\n    \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains/newbrand.com",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains",
+								"newbrand.com"
+							]
+						},
+						"description": "Update domain configuration (from_name, limits, status, mail_config)."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Domain - SMTP Config",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"mail_config\": {\n        \"host\": \"new-smtp.newbrand.com\",\n        \"port\": 587,\n        \"encryption\": \"tls\",\n        \"username\": \"updated@newbrand.com\",\n        \"password\": \"new_smtp_password\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains/newbrand.com",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains",
+								"newbrand.com"
+							]
+						},
+						"description": "Update domain's SMTP/mail configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "Test Email Configuration",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"test@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains/menuvire.com/test-email",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains",
+								"menuvire.com",
+								"test-email"
+							]
+						},
+						"description": "Send a test email to verify the domain's SMTP configuration is working."
+					},
+					"response": []
+				},
+				{
+					"name": "Regenerate API Key",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains/newbrand.com/regenerate-key",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains",
+								"newbrand.com",
+								"regenerate-key"
+							]
+						},
+						"description": "Regenerate the API key for a domain. The old key will be invalidated immediately."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Domain API Key (Recovery)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains/menuvire.com/api-key",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains",
+								"menuvire.com",
+								"api-key"
+							]
+						},
+						"description": "Retrieve the API key for a domain (for recovery purposes)."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Domain",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains/newbrand.com",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains",
+								"newbrand.com"
+							]
+						},
+						"description": "Delete a domain. Will fail if domain has templates (use ?force=true to delete anyway)."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Domain (Force)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-Admin-Key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/domains/newbrand.com?force=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"domains",
+								"newbrand.com"
+							],
+							"query": [
+								{
+									"key": "force",
+									"value": "true",
+									"description": "Force delete domain and all its templates"
+								}
+							]
+						},
+						"description": "Force delete a domain including all its templates."
+					},
+					"response": []
+				}
+			],
+			"description": "Admin endpoints for managing domains and their email configurations. Requires X-Admin-Key header."
 		},
 		{
 			"name": "Email Sending",
@@ -545,6 +933,12 @@
 			"key": "base_url",
 			"value": "http://localhost:8001",
 			"type": "string"
+		},
+		{
+			"key": "admin_api_key",
+			"value": "admin_8c91293344979bc9328b8227f3e67989c9e97353322dcbd3c8684e62be0b715a",
+			"type": "string",
+			"description": "Admin API key for domain management"
 		},
 		{
 			"key": "menuvire_api_key",

@@ -177,13 +177,162 @@ http://your-domain.com/api
 
 ### Authentication
 
-All requests require the `X-API-Key` header:
-
+**Domain API Key** (for sending emails and managing templates):
 ```
-X-API-Key: eak_your_api_key_here
+X-API-Key: eak_your_domain_api_key_here
 ```
 
-### Endpoints
+**Admin API Key** (for managing domains):
+```
+X-Admin-Key: admin_your_admin_key_here
+```
+
+### Admin Endpoints (Domain Management)
+
+#### 1. List All Domains
+
+**GET** `/api/admin/domains`
+
+**Headers:**
+```
+X-Admin-Key: admin_your_admin_key_here
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "domains": [
+      {
+        "id": 1,
+        "domain": "menuvire.com",
+        "from_email": "noreply@menuvire.com",
+        "from_name": "MenuVire",
+        "mailer": "smtp",
+        "status": "active",
+        "daily_limit": 1000,
+        "hourly_limit": 100
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
+#### 2. Create Domain with SMTP Config
+
+**POST** `/api/admin/domains`
+
+**Headers:**
+```
+Content-Type: application/json
+X-Admin-Key: admin_your_admin_key_here
+```
+
+**Request Body:**
+```json
+{
+  "domain": "newbrand.com",
+  "from_email": "hello@newbrand.com",
+  "from_name": "NewBrand",
+  "mailer": "smtp",
+  "daily_limit": 1000,
+  "hourly_limit": 100,
+  "mail_config": {
+    "host": "mail.newbrand.com",
+    "port": 465,
+    "encryption": "ssl",
+    "username": "hello@newbrand.com",
+    "password": "your_smtp_password"
+  }
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Domain created successfully",
+  "data": {
+    "domain": "newbrand.com",
+    "api_key": "eak_xxxxx...",
+    "status": "active"
+  },
+  "warning": "Save the API key now! It will not be shown again."
+}
+```
+
+#### 3. Get Domain Details
+
+**GET** `/api/admin/domains/{domain}`
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "domain": {
+      "id": 1,
+      "domain": "menuvire.com",
+      "from_email": "noreply@menuvire.com",
+      "status": "active"
+    },
+    "mail_config": {
+      "host": "mail.menuvire.com",
+      "port": 465,
+      "configured": true
+    },
+    "statistics": {
+      "templates": 5,
+      "emails_sent": 1250,
+      "emails_failed": 3
+    }
+  }
+}
+```
+
+#### 4. Update Domain
+
+**PUT** `/api/admin/domains/{domain}`
+
+**Request Body:**
+```json
+{
+  "from_name": "Updated Name",
+  "daily_limit": 2000,
+  "status": "active"
+}
+```
+
+#### 5. Test Email Configuration
+
+**POST** `/api/admin/domains/{domain}/test-email`
+
+**Request Body:**
+```json
+{
+  "to": "test@example.com"
+}
+```
+
+#### 6. Regenerate API Key
+
+**POST** `/api/admin/domains/{domain}/regenerate-key`
+
+#### 7. Get API Key (Recovery)
+
+**GET** `/api/admin/domains/{domain}/api-key`
+
+#### 8. Delete Domain
+
+**DELETE** `/api/admin/domains/{domain}`
+
+Add `?force=true` to delete domain with all its templates.
+
+---
+
+### Domain Endpoints
 
 #### 1. Send Email
 
