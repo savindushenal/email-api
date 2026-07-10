@@ -16,6 +16,7 @@ class EmailDomain extends Model
         'from_email',
         'from_name',
         'mailer',
+        'mail_config',
         'status',
         'api_key',
         'ses_key',
@@ -34,6 +35,7 @@ class EmailDomain extends Model
     protected $casts = [
         'daily_limit' => 'integer',
         'hourly_limit' => 'integer',
+        'mail_config' => 'array',
     ];
 
     /**
