@@ -53,10 +53,11 @@ class EmailService
             $renderedHtml = $this->renderBladeTemplate($template->blade_html, $data);
             $renderedSubject = $this->renderBladeTemplate($template->subject, $data);
 
-            // Inject open-tracking pixel when CRM provides a URL
+            // Inject open-tracking pixel when CRM provides a URL (skip if template already embeds it)
             if (!empty($data['tracking_pixel_url'])) {
                 $pixelUrl = trim((string) $data['tracking_pixel_url']);
-                if ($pixelUrl !== '' && preg_match('#^https?://#i', $pixelUrl)) {
+                if ($pixelUrl !== '' && preg_match('#^https?://#i', $pixelUrl)
+                    && stripos($renderedHtml, $pixelUrl) === false) {
                     $pixel = '<img src="' . e($pixelUrl) . '" width="1" height="1" alt="" border="0" style="width:1px;height:1px;opacity:0;" />';
                     if (stripos($renderedHtml, '</body>') !== false) {
                         $renderedHtml = str_ireplace('</body>', $pixel . '</body>', $renderedHtml);

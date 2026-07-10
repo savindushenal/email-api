@@ -326,7 +326,7 @@ class AbstercoCrmSeeder extends Seeder
                     ['name' => 'body',                'type' => 'string', 'description' => 'Plain-text message body',         'required' => true],
                     ['name' => 'tracking_pixel_url',  'type' => 'url',    'description' => 'Open-tracking pixel (injected)',  'required' => false],
                 ],
-                'blade_html' => "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3f3f46;font-size:15px;line-height:1.7}</style></head><body><div>{!! nl2br(e(\$body)) !!}</div></body></html>",
+                'blade_html' => "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3f3f46;font-size:15px;line-height:1.7}</style></head><body><div>{!! nl2br(e(\$body)) !!}</div>@if(!empty(\$tracking_pixel_url))<img src=\"{{ \$tracking_pixel_url }}\" width=\"1\" height=\"1\" alt=\"\" border=\"0\" style=\"width:1px;height:1px;opacity:0;\" />@endif</body></html>",
                 'status' => 'active',
             ],
         ];
