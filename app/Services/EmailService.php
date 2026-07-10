@@ -53,6 +53,17 @@ class EmailService
             $renderedHtml = $this->renderBladeTemplate($template->blade_html, $data);
             $renderedSubject = $this->renderBladeTemplate($template->subject, $data);
 
+            // Inject open-tracking pixel when CRM provides a URL
+            if (!empty($data['tracking_pixel_url'])) {
+                $pixelUrl = $data['tracking_pixel_url'];
+                $pixel = '<img src="' . e($pixelUrl) . '" width="1" height="1" alt="" style="display:none" />';
+                if (stripos($renderedHtml, '</body>') !== false) {
+                    $renderedHtml = str_ireplace('</body>', $pixel . '</body>', $renderedHtml);
+                } else {
+                    $renderedHtml .= $pixel;
+                }
+            }
+
             // Create email log entry
             $emailLog = EmailLog::create([
                 'domain_id' => $domain->id,
