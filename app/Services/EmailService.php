@@ -55,8 +55,8 @@ class EmailService
 
             // Inject open-tracking pixel when CRM provides a URL
             if (!empty($data['tracking_pixel_url'])) {
-                $pixelUrl = filter_var($data['tracking_pixel_url'], FILTER_VALIDATE_URL);
-                if ($pixelUrl) {
+                $pixelUrl = trim((string) $data['tracking_pixel_url']);
+                if ($pixelUrl !== '' && preg_match('#^https?://#i', $pixelUrl)) {
                     $pixel = '<img src="' . e($pixelUrl) . '" width="1" height="1" alt="" border="0" style="width:1px;height:1px;opacity:0;" />';
                     if (stripos($renderedHtml, '</body>') !== false) {
                         $renderedHtml = str_ireplace('</body>', $pixel . '</body>', $renderedHtml);
