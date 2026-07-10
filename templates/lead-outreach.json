@@ -1,0 +1,15 @@
+{
+  "template_key": "lead-outreach",
+  "category": "notification",
+  "description": "Staff-composed outreach email to a sales lead (open tracking via pixel)",
+  "subject": "{{ $subject }}",
+  "variables": [
+    { "name": "prospect_name", "type": "string", "description": "Lead/prospect name", "required": false },
+    { "name": "subject", "type": "string", "description": "Email subject line", "required": true },
+    { "name": "body", "type": "string", "description": "Plain-text message body", "required": true },
+    { "name": "sender_name", "type": "string", "description": "Staff member sending the email", "required": true },
+    { "name": "tracking_pixel_url", "type": "url", "description": "Open-tracking pixel (injected)", "required": false }
+  ],
+  "blade_html": "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}.container{max-width:600px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}.header{background:#18181b;padding:32px 40px}.header h1{margin:0;color:#84cc16;font-size:22px;font-weight:700;letter-spacing:-.5px}.header p{margin:4px 0 0;color:#a1a1aa;font-size:13px}.body{padding:32px 40px}.body p{margin:0 0 16px;color:#52525b;font-size:15px;line-height:1.6}.message{color:#3f3f46;font-size:15px;line-height:1.7}.signature{margin-top:24px;padding-top:16px;border-top:1px solid #f4f4f5;font-size:14px;color:#71717a}.footer{background:#f4f4f5;padding:20px 40px;text-align:center}.footer p{margin:0;color:#a1a1aa;font-size:12px}</style></head><body><div class='container'><div class='header'><h1>Absterco</h1><p>Sales Team</p></div><div class='body'>@if(!empty($prospect_name))<p>Hi {{ $prospect_name }},</p>@endif<div class='message'>{!! nl2br(e($body)) !!}</div><p class='signature'>— {{ $sender_name }}<br>Absterco</p></div><div class='footer'><p>Absterco &bull; crm.absterco.com</p></div></div></body></html>",
+  "status": "active"
+}
