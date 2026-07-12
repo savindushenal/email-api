@@ -6,6 +6,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Mail\Mailables\Headers;
 use Illuminate\Mail\Mailables\Address;
 use Illuminate\Queue\SerializesModels;
 
@@ -66,7 +67,17 @@ class DynamicTemplateMail extends Mailable
             cc: $cc,
             bcc: $bcc,
             subject: $this->emailSubject,
-            messageId: $this->messageIdHeader,
+        );
+    }
+
+    public function headers(): Headers
+    {
+        if ($this->messageIdHeader === null) {
+            return new Headers();
+        }
+
+        return new Headers(
+            messageId: trim($this->messageIdHeader, '<>'),
         );
     }
 
