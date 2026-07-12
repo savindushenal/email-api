@@ -14,16 +14,11 @@ use Exception;
 
 class EmailService
 {
-    /**
-     * Send email using the appropriate mailer.
-     *
-     * @param EmailDomain $domain
-     * @param string $templateKey
-     * @param string $toEmail
-     * @param array $data
-     * @param EmailSendOptions|null $options
-     * @return array
-     */
+    public function __construct(
+        protected DomainMailConfigService $mailConfigService
+    ) {
+    }
+
     public function send(
         EmailDomain $domain,
         string $templateKey,
@@ -54,7 +49,6 @@ class EmailService
 
             $fromEmail = $options->fromEmail ?: $domain->from_email;
             $fromName = $options->fromName ?: $domain->from_name;
-
             $this->assertEmailOnDomain($fromEmail, $domain->domain);
 
             $staffMailbox = null;
@@ -82,6 +76,13 @@ class EmailService
                 }
             }
 
+            $cc = $this->normalizeRecipientList($options->cc, $toEmail);
+            $bcc = $this->normalizeRecipientList($options->bcc, $toEmail, $cc);
+            $replyTo = $options->replyTo ? trim($options->replyTo) : null;
+            if ($replyTo !== null && $replyTo !== '' && !$this->validateEmail($replyTo)) {
+                throw new Exception('Invalid reply_to address');
+            }
+
             $emailLog = EmailLog::create([
                 'domain_id' => $domain->id,
                 'template_id' => $template->id,
@@ -100,29 +101,29 @@ class EmailService
                 $this->configureMailer($domain);
             }
 
-            $messageId = $this->generateMessageId($domain->domain);
+            $messageIdHeader = $this->generateMessageId($domain->domain);
 
             $mailable = new DynamicTemplateMail(
                 $renderedHtml,
                 $renderedSubject,
                 $fromEmail,
                 $fromName,
-                $options->cc,
-                $options->bcc,
-                $options->replyTo,
-                $messageId
+                $cc,
+                $bcc,
+                $replyTo ?: null,
+                $messageIdHeader
             );
 
             Mail::to($toEmail)->send($mailable);
 
-            $emailLog->markAsSent($messageId);
+            $emailLog->markAsSent($messageIdHeader);
 
             return [
                 'success' => true,
                 'message' => 'Email sent successfully',
                 'data' => [
                     'log_id' => $emailLog->id,
-                    'message_id' => $messageId,
+                    'message_id' => $messageIdHeader,
                     'to' => $toEmail,
                     'from' => $fromEmail,
                     'subject' => $renderedSubject,
@@ -182,7 +183,7 @@ class EmailService
                 'port' => $mailConfig['port'] ?? 465,
                 'encryption' => $mailConfig['encryption'] ?? 'ssl',
                 'username' => $mailConfig['username'] ?? null,
-                'password' => $mailConfig['password'] ?? null,
+                'password' => $this->mailConfigService->smtpPassword($mailConfig),
                 'timeout' => null,
             ]);
         } else {
@@ -220,6 +221,35 @@ class EmailService
     public function validateEmail(string $email): bool
     {
         return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    }
+
+    /**
+     * @param string[] $emails
+     * @param string[] $extraExclude
+     * @return string[]
+     */
+    protected function normalizeRecipientList(array $emails, string $toEmail, array $extraExclude = []): array
+    {
+        $exclude = array_map('strtolower', array_merge([$toEmail], $extraExclude));
+        $seen = [];
+        $normalized = [];
+
+        foreach ($emails as $email) {
+            if (!is_string($email)) {
+                continue;
+            }
+            $trimmed = strtolower(trim($email));
+            if ($trimmed === '' || !$this->validateEmail($trimmed)) {
+                continue;
+            }
+            if (in_array($trimmed, $exclude, true) || isset($seen[$trimmed])) {
+                continue;
+            }
+            $seen[$trimmed] = true;
+            $normalized[] = $trimmed;
+        }
+
+        return $normalized;
     }
 
     public function getStats(EmailDomain $domain, string $period = 'today'): array

@@ -19,15 +19,8 @@ class EmailController extends Controller
         $this->emailService = $emailService;
     }
 
-    /**
-     * Send an email using a template.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function send(Request $request): JsonResponse
     {
-        // Validate request
         $validator = Validator::make($request->all(), [
             'domain' => 'required|string',
             'template' => 'required|string',
@@ -36,8 +29,10 @@ class EmailController extends Controller
             'from_email' => 'sometimes|email',
             'from_name' => 'sometimes|string|max:255',
             'reply_to' => 'sometimes|email',
-            'cc' => 'sometimes',
-            'bcc' => 'sometimes',
+            'cc' => 'sometimes|array|max:10',
+            'cc.*' => 'email',
+            'bcc' => 'sometimes|array|max:10',
+            'bcc.*' => 'email',
         ]);
 
         if ($validator->fails()) {
@@ -48,10 +43,8 @@ class EmailController extends Controller
             ], 422);
         }
 
-        // Get authenticated domain from middleware
         $authenticatedDomain = $request->get('authenticated_domain');
 
-        // Verify the requested domain matches the authenticated domain
         if ($authenticatedDomain->domain !== $request->input('domain')) {
             return response()->json([
                 'success' => false,
@@ -61,7 +54,6 @@ class EmailController extends Controller
             ], 403);
         }
 
-        // Send email
         $options = EmailSendOptions::fromArray($request->all());
         $result = $this->emailService->send(
             $authenticatedDomain,
@@ -74,18 +66,12 @@ class EmailController extends Controller
         return response()->json($result, $result['success'] ? 200 : 500);
     }
 
-    /**
-     * Get sending statistics for the authenticated domain.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function stats(Request $request): JsonResponse
     {
         $authenticatedDomain = $request->get('authenticated_domain');
-        
+
         $period = $request->input('period', 'today');
-        
+
         if (!in_array($period, ['today', 'week', 'month'])) {
             return response()->json([
                 'success' => false,
@@ -101,11 +87,6 @@ class EmailController extends Controller
         ]);
     }
 
-    /**
-     * Health check endpoint.
-     *
-     * @return JsonResponse
-     */
     public function health(): JsonResponse
     {
         return response()->json([

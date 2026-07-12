@@ -36,6 +36,7 @@ class EmailDomain extends Model
         'mail_config' => 'array',
         'daily_limit' => 'integer',
         'hourly_limit' => 'integer',
+        'mail_config' => 'array',
     ];
 
     /**

@@ -20,68 +20,61 @@ class DynamicTemplateMail extends Mailable
     public string $fromName;
 
     /** @var string[] */
-    public array $ccEmails;
+    public array $ccRecipients;
 
     /** @var string[] */
-    public array $bccEmails;
+    public array $bccRecipients;
 
-    public ?string $replyToEmail;
-    public ?string $messageId;
+    public ?string $replyToAddress;
+    public ?string $messageIdHeader;
 
     /**
-     * @param string[] $ccEmails
-     * @param string[] $bccEmails
+     * @param string[] $ccRecipients
+     * @param string[] $bccRecipients
      */
     public function __construct(
         string $htmlContent,
         string $subject,
         string $fromEmail,
         string $fromName,
-        array $ccEmails = [],
-        array $bccEmails = [],
-        ?string $replyToEmail = null,
-        ?string $messageId = null
+        array $ccRecipients = [],
+        array $bccRecipients = [],
+        ?string $replyToAddress = null,
+        ?string $messageIdHeader = null
     ) {
         $this->htmlContent = $htmlContent;
         $this->emailSubject = $subject;
         $this->fromEmail = $fromEmail;
         $this->fromName = $fromName;
-        $this->ccEmails = $ccEmails;
-        $this->bccEmails = $bccEmails;
-        $this->replyToEmail = $replyToEmail;
-        $this->messageId = $messageId;
+        $this->ccRecipients = $ccRecipients;
+        $this->bccRecipients = $bccRecipients;
+        $this->replyToAddress = $replyToAddress;
+        $this->messageIdHeader = $messageIdHeader;
     }
 
     public function envelope(): Envelope
     {
-        $envelope = new Envelope(
+        $cc = array_map(fn (string $email) => new Address($email), $this->ccRecipients);
+        $bcc = array_map(fn (string $email) => new Address($email), $this->bccRecipients);
+        $replyTo = $this->replyToAddress ? [new Address($this->replyToAddress)] : [];
+
+        return new Envelope(
             from: new Address($this->fromEmail, $this->fromName),
+            replyTo: $replyTo,
+            cc: $cc,
+            bcc: $bcc,
             subject: $this->emailSubject,
         );
-
-        if ($this->replyToEmail) {
-            $envelope->replyTo = [new Address($this->replyToEmail)];
-        }
-
-        if (!empty($this->ccEmails)) {
-            $envelope->cc = array_map(fn (string $email) => new Address($email), $this->ccEmails);
-        }
-
-        if (!empty($this->bccEmails)) {
-            $envelope->bcc = array_map(fn (string $email) => new Address($email), $this->bccEmails);
-        }
-
-        return $envelope;
     }
 
     public function headers(): Headers
     {
-        if (!$this->messageId) {
+        if ($this->messageIdHeader === null) {
             return new Headers();
         }
 
         return new Headers(
-            messageId: $this->messageId,
+            messageId: trim($this->messageIdHeader, '<>'),
         );
     }
 
@@ -97,4 +90,3 @@ class DynamicTemplateMail extends Mailable
         return [];
     }
 }
-

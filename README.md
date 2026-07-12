@@ -350,6 +350,9 @@ X-API-Key: eak_your_api_key_here
   "domain": "menuvire.com",
   "template": "otp",
   "to": "user@gmail.com",
+  "cc": ["manager@example.com"],
+  "bcc": ["archive@example.com"],
+  "reply_to": "reply+token@crm.absterco.com",
   "data": {
     "name": "Savindu",
     "otp": "492031",
@@ -357,6 +360,8 @@ X-API-Key: eak_your_api_key_here
   }
 }
 ```
+
+Optional fields `cc`, `bcc` (arrays of email addresses), and `reply_to` (single address) are supported on all sends. Addresses are validated and deduplicated against `to`.
 
 **Success Response (200):**
 ```json
@@ -690,6 +695,87 @@ email-api/
     └── app.php
 ```
 
+## 📥 Inbound IMAP — Deal Email Replies (Absterco CRM)
+
+Polls mailboxes configured **per domain** in `email_domains.mail_config.inbound` and forwards matched deal replies to the CRM webhook. Ticket, invoice, and OTP domains should leave `inbound.enabled` false.
+
+### Requirements
+
+- PHP **IMAP extension** enabled (`php-imap`)
+- `crm.absterco.com` MX points to hostns (not Zoho)
+- Plus-addressing on the mailbox so `reply+{token}@crm.absterco.com` delivers to `system@crm.absterco.com`
+- CRM webhook env vars (global — one CRM target)
+
+### Per-domain config (`mail_config.inbound`)
+
+Stored on `email_domains.mail_config` alongside SMTP. Passwords encrypted at rest (`enc:` + Laravel Crypt / `APP_KEY`).
+
+```json
+{
+  "transport": "smtp",
+  "host": "uniform.de.hostns.io",
+  "port": 465,
+  "encryption": "ssl",
+  "username": "system@crm.absterco.com",
+  "password": "enc:...",
+  "inbound": {
+    "enabled": true,
+    "host": "uniform.de.hostns.io",
+    "port": 993,
+    "encryption": "ssl",
+    "folder": "INBOX"
+  }
+}
+```
+
+When `inbound.username` / `inbound.password` are omitted, the poller reuses SMTP credentials. Set `inbound.enabled: false` (or omit `inbound`) for domains that only send transactional mail.
+
+Enable via admin API when creating/updating a domain:
+
+```json
+"mail_config": {
+  "host": "uniform.de.hostns.io",
+  "port": 465,
+  "encryption": "ssl",
+  "username": "system@crm.absterco.com",
+  "password": "your-password",
+  "inbound": { "enabled": true, "port": 993 }
+}
+```
+
+Re-run `php artisan db:seed --class=AbstercoCrmSeeder` to apply inbound config for `crm.absterco.com`.
+
+### Environment (webhook only)
+
+```env
+INBOUND_CRM_WEBHOOK_URL=https://crm.absterco.com/api/webhooks/email-api/inbound-deal-reply
+INBOUND_CRM_WEBHOOK_SECRET=shared-secret-with-crm
+```
+
+Legacy `INBOUND_IMAP_*` env vars still work but log a deprecation warning — prefer DB config.
+
+### Manual run
+
+```bash
+php artisan email:poll-inbound
+```
+
+### Cron (production)
+
+Laravel scheduler runs every 3 minutes via `app/Console/Kernel.php`. On the server, add:
+
+```cron
+* * * * * cd /path/to/email-api && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Or run the command directly:
+
+```cron
+*/3 * * * * cd /path/to/email-api && php artisan email:poll-inbound >> /dev/null 2>&1
+```
+
+See `absterco-crm/docs/EMAIL_API_INTEGRATION.md` for the full reply-matching flow.
+
 ## 🔐 Production Checklist
 
 - [ ] Set `APP_ENV=production` in `.env`
@@ -703,6 +789,8 @@ email-api/
 - [ ] Configure backup strategy
 - [ ] Test all email templates
 - [ ] Secure API keys (rotate regularly)
+- [ ] Enable PHP IMAP extension and configure inbound poll cron (deal replies)
+- [ ] Confirm plus-addressing on `system@crm.absterco.com` and MX for `crm.absterco.com` → hostns
 
 ## 📄 License
 
