@@ -16,9 +16,11 @@ class InboundImapService
     /**
      * Poll IMAP inboxes (per-domain mail_config.inbound) and forward deal replies to CRM.
      *
-     * @return array{processed: int, forwarded: int, skipped: int, errors: int, mailboxes: int}
+     * @param bool $includeSeen When true, also process read messages from the last $days days (CRM dedupes by messageId).
+     * @param int $days Lookback window when $includeSeen is true.
+     * @return array{processed: int, forwarded: int, skipped: int, errors: int, mailboxes: int, details: list<array{mailbox: string, domain: ?string, candidates: int}>}
      */
-    public function poll(): array
+    public function poll(bool $includeSeen = false, int $days = 7): array
     {
         if (!extension_loaded('imap')) {
             throw new \RuntimeException('PHP IMAP extension is not installed');
@@ -31,15 +33,28 @@ class InboundImapService
             );
         }
 
-        $stats = ['processed' => 0, 'forwarded' => 0, 'skipped' => 0, 'errors' => 0, 'mailboxes' => count($mailboxes)];
+        $stats = [
+            'processed' => 0,
+            'forwarded' => 0,
+            'skipped' => 0,
+            'errors' => 0,
+            'unmatched' => 0,
+            'mailboxes' => count($mailboxes),
+            'details' => [],
+        ];
 
         foreach ($mailboxes as $config) {
             $label = $config['username'];
             try {
-                $mailboxStats = $this->pollMailbox($config);
-                foreach (['processed', 'forwarded', 'skipped', 'errors'] as $key) {
+                $mailboxStats = $this->pollMailbox($config, $includeSeen, $days);
+                foreach (['processed', 'forwarded', 'skipped', 'errors', 'unmatched'] as $key) {
                     $stats[$key] += $mailboxStats[$key];
                 }
+                $stats['details'][] = [
+                    'mailbox' => $label,
+                    'domain' => $config['domain'] ?? null,
+                    'candidates' => $mailboxStats['candidates'],
+                ];
             } catch (\Throwable $e) {
                 $stats['errors']++;
                 Log::error('[imap] Mailbox poll failed', [
@@ -128,9 +143,9 @@ class InboundImapService
 
     /**
      * @param array{username: string, password: string, host: string, port: int, encryption: string, folder: string} $config
-     * @return array{processed: int, forwarded: int, skipped: int, errors: int}
+     * @return array{processed: int, forwarded: int, skipped: int, errors: int, unmatched: int, candidates: int}
      */
-    protected function pollMailbox(array $config): array
+    protected function pollMailbox(array $config, bool $includeSeen = false, int $days = 7): array
     {
         $mailbox = $this->buildMailboxString($config);
         $connection = @imap_open($mailbox, $config['username'], $config['password']);
@@ -140,10 +155,11 @@ class InboundImapService
             );
         }
 
-        $stats = ['processed' => 0, 'forwarded' => 0, 'skipped' => 0, 'errors' => 0];
+        $stats = ['processed' => 0, 'forwarded' => 0, 'skipped' => 0, 'errors' => 0, 'unmatched' => 0, 'candidates' => 0];
 
         try {
-            $uids = imap_search($connection, 'UNSEEN') ?: [];
+            $uids = $this->searchMessageUids($connection, $includeSeen, $days);
+            $stats['candidates'] = count($uids);
             foreach ($uids as $uid) {
                 $stats['processed']++;
                 try {
@@ -158,8 +174,12 @@ class InboundImapService
                         $payload['sourceDomain'] = $config['domain'];
                     }
 
-                    if ($this->forwardToCrm($payload)) {
+                    $result = $this->forwardToCrm($payload);
+                    if ($result === 'forwarded') {
                         $stats['forwarded']++;
+                        imap_setflag_full($connection, (string) $uid, '\\Seen');
+                    } elseif ($result === 'unmatched') {
+                        $stats['unmatched']++;
                         imap_setflag_full($connection, (string) $uid, '\\Seen');
                     } else {
                         $stats['errors']++;
@@ -179,6 +199,22 @@ class InboundImapService
         }
 
         return $stats;
+    }
+
+    /**
+     * @return list<int>
+     */
+    protected function searchMessageUids($connection, bool $includeSeen, int $days): array
+    {
+        if (!$includeSeen) {
+            return imap_search($connection, 'UNSEEN') ?: [];
+        }
+
+        $since = date('d-M-Y', strtotime(sprintf('-%d days', max(1, $days))));
+        $criteria = sprintf('SINCE "%s"', $since);
+        $uids = imap_search($connection, $criteria) ?: [];
+
+        return array_values(array_unique(array_map('intval', $uids)));
     }
 
     /**
@@ -326,8 +362,9 @@ class InboundImapService
 
     /**
      * @param array<string, mixed> $payload
+     * @return 'forwarded'|'unmatched'|'error'
      */
-    protected function forwardToCrm(array $payload): bool
+    protected function forwardToCrm(array $payload): string
     {
         $url = env('INBOUND_CRM_WEBHOOK_URL');
         $secret = env('INBOUND_CRM_WEBHOOK_SECRET');
@@ -349,12 +386,18 @@ class InboundImapService
             ]);
         } catch (GuzzleException $e) {
             Log::error('[imap] CRM webhook request failed', ['error' => $e->getMessage()]);
-            return false;
+            return 'error';
         }
 
         $status = $response->getStatusCode();
         if ($status === 404) {
-            return true;
+            Log::info('[imap] CRM could not match reply to a deal thread', [
+                'from' => $payload['from'] ?? null,
+                'subject' => $payload['subject'] ?? null,
+                'inReplyTo' => $payload['inReplyTo'] ?? null,
+                'replyToken' => $payload['replyToken'] ?? null,
+            ]);
+            return 'unmatched';
         }
 
         if ($status < 200 || $status >= 300) {
@@ -362,9 +405,9 @@ class InboundImapService
                 'status' => $status,
                 'body' => (string) $response->getBody(),
             ]);
-            return false;
+            return 'error';
         }
 
-        return true;
+        return 'forwarded';
     }
 }
