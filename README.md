@@ -697,18 +697,21 @@ email-api/
 
 ## 📥 Inbound IMAP — Deal Email Replies (Absterco CRM)
 
-Polls mailboxes configured **per domain** in `email_domains.mail_config.inbound` and forwards matched deal replies to the CRM webhook. Ticket, invoice, and OTP domains should leave `inbound.enabled` false.
+Polls **staff outreach mailboxes** on `email.absterco.com` (`staff_mailboxes` table) plus any domain with `mail_config.inbound.enabled`. Forwards matched deal replies to the CRM webhook. Ticket, invoice, and OTP mail on `crm.absterco.com` should leave `inbound.enabled` false.
 
 ### Requirements
 
 - PHP **IMAP extension** enabled (`php-imap`)
-- `crm.absterco.com` MX points to hostns (not Zoho)
-- Plus-addressing on the mailbox so `reply+{token}@crm.absterco.com` delivers to `system@crm.absterco.com`
+- `email.absterco.com` MX points to hostns (staff mailboxes created in cPanel)
+- Each sales rep has an outreach mailbox (e.g. `savindu@email.absterco.com`) synced via CRM Staff Management
+- Deal emails set **Reply-To** to the staff mailbox so prospect replies land there
 - CRM webhook env vars (global — one CRM target)
 
 ### Per-domain config (`mail_config.inbound`)
 
 Stored on `email_domains.mail_config` alongside SMTP. Passwords encrypted at rest (`enc:` + Laravel Crypt / `APP_KEY`).
+
+`crm.absterco.com` (automated only — inbound disabled):
 
 ```json
 {
@@ -716,7 +719,21 @@ Stored on `email_domains.mail_config` alongside SMTP. Passwords encrypted at res
   "host": "uniform.de.hostns.io",
   "port": 465,
   "encryption": "ssl",
-  "username": "system@crm.absterco.com",
+  "username": "noreply@crm.absterco.com",
+  "password": "enc:...",
+  "inbound": { "enabled": false }
+}
+```
+
+`email.absterco.com` (outreach — optional domain-level inbound fallback):
+
+```json
+{
+  "transport": "smtp",
+  "host": "uniform.de.hostns.io",
+  "port": 465,
+  "encryption": "ssl",
+  "username": "noreply@email.absterco.com",
   "password": "enc:...",
   "inbound": {
     "enabled": true,
@@ -728,22 +745,21 @@ Stored on `email_domains.mail_config` alongside SMTP. Passwords encrypted at res
 }
 ```
 
-When `inbound.username` / `inbound.password` are omitted, the poller reuses SMTP credentials. Set `inbound.enabled: false` (or omit `inbound`) for domains that only send transactional mail.
+Primary inbound polling uses `staff_mailboxes` (one IMAP login per sales rep). When `inbound.username` / `inbound.password` are omitted on a domain, the poller reuses SMTP credentials.
 
-Enable via admin API when creating/updating a domain:
+Enable staff mailboxes via admin API:
 
 ```json
-"mail_config": {
-  "host": "uniform.de.hostns.io",
-  "port": 465,
-  "encryption": "ssl",
-  "username": "system@crm.absterco.com",
-  "password": "your-password",
-  "inbound": { "enabled": true, "port": 993 }
+POST /api/admin/mailboxes
+{
+  "domain": "email.absterco.com",
+  "email": "savindu@email.absterco.com",
+  "display_name": "Savindu",
+  "mailbox_password": "your-cpanel-password"
 }
 ```
 
-Re-run `php artisan db:seed --class=AbstercoCrmSeeder` to apply inbound config for `crm.absterco.com`.
+Re-run `php artisan db:seed --class=AbstercoCrmSeeder` to register both domains and templates.
 
 ### Environment (webhook only)
 
@@ -789,8 +805,8 @@ See `absterco-crm/docs/EMAIL_API_INTEGRATION.md` for the full reply-matching flo
 - [ ] Configure backup strategy
 - [ ] Test all email templates
 - [ ] Secure API keys (rotate regularly)
-- [ ] Enable PHP IMAP extension and configure inbound poll cron (deal replies)
-- [ ] Confirm plus-addressing on `system@crm.absterco.com` and MX for `crm.absterco.com` → hostns
+- [ ] Enable PHP IMAP extension and configure inbound poll cron (deal replies via staff mailboxes on email.absterco.com)
+- [ ] Confirm MX for `email.absterco.com` → hostns and staff mailboxes exist in cPanel
 
 ## 📄 License
 

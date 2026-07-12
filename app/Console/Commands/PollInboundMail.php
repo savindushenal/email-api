@@ -49,7 +49,7 @@ class PollInboundMail extends Command
                 );
                 if ($inboxEmpty) {
                     $this->warn(
-                        'INBOX is empty — the reply has not been delivered to system@crm.absterco.com. Run php artisan email:diagnose-inbound for folder details.'
+                        'INBOX is empty — the reply has not been delivered to the staff mailbox yet. Run php artisan email:diagnose-inbound for folder details.'
                     );
                 } elseif ($includeSeen) {
                     $this->warn(

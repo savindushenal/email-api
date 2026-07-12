@@ -6,15 +6,14 @@ use Illuminate\Database\Seeder;
 use App\Models\EmailDomain;
 use App\Models\EmailTemplate;
 use App\Services\DomainMailConfigService;
-use Illuminate\Support\Str;
 
 class AbstercoCrmSeeder extends Seeder
 {
-    /**
-     * Raw API key for crm.absterco.com
-     * Store this in CRM .env as EMAIL_API_KEY
-     */
-    const RAW_API_KEY = 'eak_AbstercoCRM2026xK9mLpQvTzWnRsYbJcFdHeGiUo';
+    /** Automated mail (invoices, tickets, OTP) — store in CRM as EMAIL_API_KEY */
+    const RAW_API_KEY_CRM = 'eak_AbstercoCRM2026xK9mLpQvTzWnRsYbJcFdHeGiUo';
+
+    /** Staff outreach mail — store in CRM as EMAIL_OUTREACH_API_KEY */
+    const RAW_API_KEY_OUTREACH = 'eak_AbstercoOutreach2026mNx8pQwRzTvYaBcDeFgHiJkLmNo';
 
     public function run(): void
     {
@@ -23,61 +22,80 @@ class AbstercoCrmSeeder extends Seeder
         $this->command->info('================================================');
         $this->command->newLine();
 
+        $mailConfigService = app(DomainMailConfigService::class);
+
         // -------------------------------------------------------
-        // 1. Register email.absterco.com domain (staff mailboxes + transactional)
+        // 1. crm.absterco.com — automated / internal mail
         // -------------------------------------------------------
-        $existing = EmailDomain::where('domain', 'email.absterco.com')->first();
-        if ($existing) {
-            $this->command->warn('Domain email.absterco.com already exists — updating config...');
-            $domain = $existing;
-        } else {
-            $domain = new EmailDomain();
+        $crmDomain = $this->upsertDomain(
+            'crm.absterco.com',
+            hash('sha256', self::RAW_API_KEY_CRM),
+            'noreply@crm.absterco.com',
+            $mailConfigService->prepareForStorage(null, [
+                'transport'  => 'smtp',
+                'host'       => 'uniform.de.hostns.io',
+                'port'       => 465,
+                'encryption' => 'ssl',
+                'username'   => 'noreply@crm.absterco.com',
+                'password'   => env('CRM_DOMAIN_SMTP_PASSWORD', env('EMAIL_DOMAIN_SMTP_PASSWORD', '')),
+                'inbound'    => ['enabled' => false],
+            ])
+        );
+
+        $this->command->info("✅ Domain registered: {$crmDomain->domain}");
+        $this->command->info('   Purpose    : automated mail (invoices, tickets, OTP)');
+        $this->command->info("   From email : {$crmDomain->from_email}");
+        $this->command->info('   Inbound    : disabled');
+        $this->command->info('   API Key    : ' . self::RAW_API_KEY_CRM);
+        $this->command->newLine();
+
+        foreach ($this->automatedTemplates($crmDomain->id) as $tpl) {
+            EmailTemplate::updateOrCreate(
+                ['domain_id' => $crmDomain->id, 'template_key' => $tpl['template_key']],
+                $tpl
+            );
+            $this->command->info("   [crm] Template: {$tpl['template_key']}");
         }
 
-        $domain->domain      = 'email.absterco.com';
-        $domain->api_key     = hash('sha256', self::RAW_API_KEY);
-        $domain->from_email  = 'noreply@email.absterco.com';
-        $domain->from_name   = 'Absterco';
-        $domain->mailer      = 'exim';
-        $domain->status      = 'active';
-        $domain->daily_limit  = 2000;
-        $domain->hourly_limit = 200;
-
-        $mailConfigService = app(DomainMailConfigService::class);
-        $domain->mail_config = $mailConfigService->prepareForStorage(null, [
-            'transport'  => 'smtp',
-            'host'       => 'uniform.de.hostns.io',
-            'port'       => 465,
-            'encryption' => 'ssl',
-            'username'   => 'noreply@email.absterco.com',
-            'password'   => env('EMAIL_DOMAIN_SMTP_PASSWORD', ''),
-            'inbound'    => [
-                'enabled'    => true,
-                'host'       => 'uniform.de.hostns.io',
-                'port'       => 993,
-                'encryption' => 'ssl',
-                'folder'     => 'INBOX',
-            ],
-        ]);
-
-        $domain->save();
-
-        $this->command->info("✅ Domain registered: {$domain->domain}");
-        $this->command->info("   From email : {$domain->from_email}");
-        $this->command->info("   SMTP host  : uniform.de.hostns.io:465 (SSL)");
-        $this->command->info("   Inbound IMAP: enabled (polls same mailbox for deal replies)");
-        $this->command->info("   API Key    : " . self::RAW_API_KEY);
         $this->command->newLine();
 
         // -------------------------------------------------------
-        // 2. Create / update all CRM templates
+        // 2. email.absterco.com — staff outreach mailboxes
         // -------------------------------------------------------
-        foreach ($this->templates($domain->id) as $tpl) {
+        $outreachDomain = $this->upsertDomain(
+            'email.absterco.com',
+            hash('sha256', self::RAW_API_KEY_OUTREACH),
+            'noreply@email.absterco.com',
+            $mailConfigService->prepareForStorage(null, [
+                'transport'  => 'smtp',
+                'host'       => 'uniform.de.hostns.io',
+                'port'       => 465,
+                'encryption' => 'ssl',
+                'username'   => 'noreply@email.absterco.com',
+                'password'   => env('EMAIL_DOMAIN_SMTP_PASSWORD', ''),
+                'inbound'    => [
+                    'enabled'    => true,
+                    'host'       => 'uniform.de.hostns.io',
+                    'port'       => 993,
+                    'encryption' => 'ssl',
+                    'folder'     => 'INBOX',
+                ],
+            ])
+        );
+
+        $this->command->info("✅ Domain registered: {$outreachDomain->domain}");
+        $this->command->info('   Purpose    : staff outreach (deal emails + IMAP replies)');
+        $this->command->info("   From email : {$outreachDomain->from_email}");
+        $this->command->info('   Inbound    : enabled (staff_mailboxes + domain fallback)');
+        $this->command->info('   API Key    : ' . self::RAW_API_KEY_OUTREACH);
+        $this->command->newLine();
+
+        foreach ($this->outreachTemplates($outreachDomain->id) as $tpl) {
             EmailTemplate::updateOrCreate(
-                ['domain_id' => $domain->id, 'template_key' => $tpl['template_key']],
+                ['domain_id' => $outreachDomain->id, 'template_key' => $tpl['template_key']],
                 $tpl
             );
-            $this->command->info("   Template created/updated: {$tpl['template_key']}");
+            $this->command->info("   [outreach] Template: {$tpl['template_key']}");
         }
 
         $this->command->newLine();
@@ -86,15 +104,46 @@ class AbstercoCrmSeeder extends Seeder
         $this->command->info('================================================');
         $this->command->newLine();
         $this->command->line('EMAIL_API_BASE_URL=https://email.absterco.com');
-        $this->command->line('EMAIL_API_KEY=' . self::RAW_API_KEY);
-        $this->command->line('EMAIL_API_DOMAIN=email.absterco.com');
+        $this->command->line('EMAIL_API_KEY=' . self::RAW_API_KEY_CRM);
+        $this->command->line('EMAIL_API_DOMAIN=crm.absterco.com');
+        $this->command->line('EMAIL_OUTREACH_API_KEY=' . self::RAW_API_KEY_OUTREACH);
+        $this->command->line('EMAIL_OUTREACH_API_DOMAIN=email.absterco.com');
+        $this->command->line('OUTREACH_MAILBOX_DOMAIN=email.absterco.com');
         $this->command->newLine();
     }
 
+    private function upsertDomain(
+        string $domainName,
+        string $apiKeyHash,
+        string $fromEmail,
+        array $mailConfig
+    ): EmailDomain {
+        $existing = EmailDomain::where('domain', $domainName)->first();
+        if ($existing) {
+            $this->command->warn("Domain {$domainName} already exists — updating config...");
+            $domain = $existing;
+        } else {
+            $domain = new EmailDomain();
+        }
+
+        $domain->domain       = $domainName;
+        $domain->api_key      = $apiKeyHash;
+        $domain->from_email   = $fromEmail;
+        $domain->from_name    = 'Absterco';
+        $domain->mailer       = 'exim';
+        $domain->status       = 'active';
+        $domain->daily_limit  = 2000;
+        $domain->hourly_limit = 200;
+        $domain->mail_config  = $mailConfig;
+        $domain->save();
+
+        return $domain;
+    }
+
     // ------------------------------------------------------------------
-    // Template definitions
+    // Template definitions — automated (crm.absterco.com)
     // ------------------------------------------------------------------
-    private function templates(int $domainId): array
+    private function automatedTemplates(int $domainId): array
     {
         return [
 
@@ -322,8 +371,15 @@ class AbstercoCrmSeeder extends Seeder
                 'blade_html' => "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}.container{max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}.header{background:#18181b;padding:32px 40px}.header h1{margin:0;color:#84cc16;font-size:22px;font-weight:700}.header p{margin:4px 0 0;color:#a1a1aa;font-size:13px}.body{padding:32px 40px}.body p{margin:0 0 16px;color:#52525b;font-size:15px;line-height:1.6}.otp-box{background:#18181b;border-radius:10px;padding:28px 24px;text-align:center;margin:24px 0}.otp-box .label{font-size:12px;font-weight:600;color:#a1a1aa;letter-spacing:2px;text-transform:uppercase;margin:0 0 12px}.otp-box .code{font-size:40px;font-weight:700;letter-spacing:12px;color:#84cc16;margin:0;font-variant-numeric:tabular-nums}.otp-box .expiry{font-size:13px;color:#71717a;margin:12px 0 0}.notice{background:#fafafa;border-left:3px solid #e4e4e7;border-radius:0 6px 6px 0;padding:12px 16px;margin-top:24px}.notice p{margin:0;font-size:13px;color:#71717a}@if(!empty(\$ip_address)).meta{font-size:12px;color:#a1a1aa;margin-top:8px}@endif.footer{background:#f4f4f5;padding:20px 40px;text-align:center}.footer p{margin:0;color:#a1a1aa;font-size:12px}</style></head><body><div class='container'><div class='header'><h1>Absterco CRM</h1><p>Security Verification</p></div><div class='body'><p>Hi {{ \$name }},</p><p>Use the code below to {{ !empty(\$action) ? \$action : 'verify your identity' }}. Do not share this code with anyone.</p><div class='otp-box'><p class='label'>Your verification code</p><p class='code'>{{ \$otp }}</p><p class='expiry'>Expires in {{ \$minutes }} minute{{ \$minutes == 1 ? '' : 's' }}</p></div><div class='notice'><p>&#128274; If you did not request this code, please ignore this email. Your account is still secure.</p>@if(!empty(\$ip_address))<p class='meta'>Request from IP: {{ \$ip_address }}</p>@endif</div></div><div class='footer'><p>Absterco CRM &bull; crm.absterco.com</p></div></div></body></html>",
                 'status' => 'active',
             ],
+        ];
+    }
 
-            // ── 12. lead-outreach ───────────────────────────────────
+    // ------------------------------------------------------------------
+    // Template definitions — outreach (email.absterco.com)
+    // ------------------------------------------------------------------
+    private function outreachTemplates(int $domainId): array
+    {
+        return [
             [
                 'domain_id'    => $domainId,
                 'template_key' => 'lead-outreach',

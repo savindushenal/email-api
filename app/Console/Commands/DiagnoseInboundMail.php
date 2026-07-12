@@ -47,7 +47,7 @@ class DiagnoseInboundMail extends Command
 
             if (($report['inbox_total'] ?? 0) === 0) {
                 $this->warn('  INBOX is empty — the prospect reply has not arrived at this mailbox.');
-                $this->line('  Check: cPanel webmail, MX record for crm.absterco.com, spam folder, and that Reply-To is system@crm.absterco.com.');
+                $this->line('  Check: cPanel webmail, MX for email.absterco.com, spam folder, and that deal emails use Reply-To = staff mailbox (e.g. savindu@email.absterco.com).');
             }
 
             if (!empty($report['recent_messages'])) {
