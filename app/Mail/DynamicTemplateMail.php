@@ -26,6 +26,8 @@ class DynamicTemplateMail extends Mailable
 
     public ?string $replyToAddress;
 
+    public ?string $messageIdHeader;
+
     /**
      * @param string[] $ccRecipients
      * @param string[] $bccRecipients
@@ -37,7 +39,8 @@ class DynamicTemplateMail extends Mailable
         string $fromName,
         array $ccRecipients = [],
         array $bccRecipients = [],
-        ?string $replyToAddress = null
+        ?string $replyToAddress = null,
+        ?string $messageIdHeader = null
     ) {
         $this->htmlContent = $htmlContent;
         $this->emailSubject = $subject;
@@ -46,6 +49,7 @@ class DynamicTemplateMail extends Mailable
         $this->ccRecipients = $ccRecipients;
         $this->bccRecipients = $bccRecipients;
         $this->replyToAddress = $replyToAddress;
+        $this->messageIdHeader = $messageIdHeader;
     }
 
     public function envelope(): Envelope
@@ -62,6 +66,7 @@ class DynamicTemplateMail extends Mailable
             cc: $cc,
             bcc: $bcc,
             subject: $this->emailSubject,
+            messageId: $this->messageIdHeader,
         );
     }
 

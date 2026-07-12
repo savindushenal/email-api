@@ -101,6 +101,9 @@ class EmailService
             // Configure mailer based on domain settings
             $this->configureMailer($domain);
 
+            $messageId = $this->generateMessageId();
+            $messageIdHeader = sprintf('<%s@%s>', $messageId, $domain->domain);
+
             // Create and send email
             $mailable = new DynamicTemplateMail(
                 $renderedHtml,
@@ -109,13 +112,13 @@ class EmailService
                 $domain->from_name,
                 $cc,
                 $bcc,
-                $replyTo ?: null
+                $replyTo ?: null,
+                $messageIdHeader
             );
 
             Mail::to($toEmail)->send($mailable);
 
-            // Mark as sent
-            $messageId = $this->generateMessageId();
+            // Mark as sent (messageId matches SMTP Message-ID header for In-Reply-To threading)
             $emailLog->markAsSent($messageId);
 
             return [
