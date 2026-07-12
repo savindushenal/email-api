@@ -54,6 +54,10 @@ class InboundImapService
                     'mailbox' => $label,
                     'domain' => $config['domain'] ?? null,
                     'candidates' => $mailboxStats['candidates'],
+                    'inbox_total' => $mailboxStats['inbox_total'],
+                    'unseen_total' => $mailboxStats['unseen_total'],
+                    'folder' => $config['folder'] ?? 'INBOX',
+                    'host' => $config['host'] ?? null,
                 ];
             } catch (\Throwable $e) {
                 $stats['errors']++;
@@ -143,7 +147,7 @@ class InboundImapService
 
     /**
      * @param array{username: string, password: string, host: string, port: int, encryption: string, folder: string} $config
-     * @return array{processed: int, forwarded: int, skipped: int, errors: int, unmatched: int, candidates: int}
+     * @return array{processed: int, forwarded: int, skipped: int, errors: int, unmatched: int, candidates: int, inbox_total: int, unseen_total: int}
      */
     protected function pollMailbox(array $config, bool $includeSeen = false, int $days = 7): array
     {
@@ -155,10 +159,23 @@ class InboundImapService
             );
         }
 
-        $stats = ['processed' => 0, 'forwarded' => 0, 'skipped' => 0, 'errors' => 0, 'unmatched' => 0, 'candidates' => 0];
+        $stats = [
+            'processed' => 0,
+            'forwarded' => 0,
+            'skipped' => 0,
+            'errors' => 0,
+            'unmatched' => 0,
+            'candidates' => 0,
+            'inbox_total' => 0,
+            'unseen_total' => 0,
+        ];
 
         try {
-            $uids = $this->searchMessageUids($connection, $includeSeen, $days);
+            $stats['inbox_total'] = imap_num_msg($connection) ?: 0;
+            $status = imap_status($connection, $mailbox, SA_UNSEEN);
+            $stats['unseen_total'] = $status ? (int) ($status->unseen ?? 0) : 0;
+
+            $uids = $this->searchMessageUids($connection, $includeSeen, $days, $stats['inbox_total']);
             $stats['candidates'] = count($uids);
             foreach ($uids as $uid) {
                 $stats['processed']++;
@@ -204,7 +221,7 @@ class InboundImapService
     /**
      * @return list<int>
      */
-    protected function searchMessageUids($connection, bool $includeSeen, int $days): array
+    protected function searchMessageUids($connection, bool $includeSeen, int $days, int $inboxTotal = 0): array
     {
         if (!$includeSeen) {
             return imap_search($connection, 'UNSEEN') ?: [];
@@ -214,7 +231,118 @@ class InboundImapService
         $criteria = sprintf('SINCE "%s"', $since);
         $uids = imap_search($connection, $criteria) ?: [];
 
+        if ($uids === [] && $inboxTotal > 0) {
+            Log::warning('[imap] SINCE search returned no UIDs but INBOX has messages — falling back to ALL', [
+                'since' => $since,
+                'inbox_total' => $inboxTotal,
+            ]);
+            $uids = imap_search($connection, 'ALL') ?: [];
+        }
+
         return array_values(array_unique(array_map('intval', $uids)));
+    }
+
+    /**
+     * Connect and return mailbox diagnostics (folder counts, recent subjects).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function diagnose(): array
+    {
+        if (!extension_loaded('imap')) {
+            throw new \RuntimeException('PHP IMAP extension is not installed');
+        }
+
+        $mailboxes = $this->resolveMailboxes();
+        if ($mailboxes === []) {
+            throw new \RuntimeException(
+                'No inbound IMAP mailboxes configured — enable mail_config.inbound on an active email_domains row'
+            );
+        }
+
+        $reports = [];
+        foreach ($mailboxes as $config) {
+            $reports[] = $this->diagnoseMailbox($config);
+        }
+
+        return $reports;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    protected function diagnoseMailbox(array $config): array
+    {
+        $mailbox = $this->buildMailboxString($config);
+        $connection = @imap_open($mailbox, $config['username'], $config['password']);
+        if ($connection === false) {
+            return [
+                'mailbox' => $config['username'],
+                'domain' => $config['domain'] ?? null,
+                'connected' => false,
+                'error' => imap_last_error() ?: 'IMAP connect failed',
+            ];
+        }
+
+        try {
+            $status = imap_status($connection, $mailbox, SA_ALL);
+            $total = imap_num_msg($connection) ?: 0;
+            $recent = [];
+            if ($total > 0) {
+                $start = max(1, $total - 4);
+                for ($msgNo = $start; $msgNo <= $total; $msgNo++) {
+                    $header = imap_headerinfo($connection, $msgNo);
+                    if (!$header) {
+                        continue;
+                    }
+                    $from = '';
+                    if (!empty($header->from[0])) {
+                        $from = ($header->from[0]->mailbox ?? '') . '@' . ($header->from[0]->host ?? '');
+                    }
+                    $recent[] = [
+                        'from' => $from,
+                        'subject' => isset($header->subject) ? imap_utf8((string) $header->subject) : null,
+                        'date' => $header->date ?? null,
+                    ];
+                }
+            }
+
+            $folders = [];
+            $rootMailbox = sprintf(
+                '{%s:%d%s}',
+                $config['host'],
+                $config['port'],
+                $config['encryption'] === 'ssl' ? '/ssl' : ($config['encryption'] === 'tls' ? '/tls' : '')
+            );
+            $folderList = @imap_list($connection, $rootMailbox, '*') ?: [];
+            foreach ($folderList as $folderPath) {
+                $name = str_replace($rootMailbox, '', $folderPath);
+                $count = 0;
+                $folderConn = @imap_open($folderPath, $config['username'], $config['password']);
+                if ($folderConn !== false) {
+                    $count = imap_num_msg($folderConn) ?: 0;
+                    imap_close($folderConn);
+                }
+                if ($count > 0) {
+                    $folders[] = ['name' => $name, 'messages' => $count];
+                }
+            }
+
+            return [
+                'mailbox' => $config['username'],
+                'domain' => $config['domain'] ?? null,
+                'connected' => true,
+                'host' => $config['host'],
+                'folder' => $config['folder'] ?? 'INBOX',
+                'inbox_total' => $total,
+                'unseen_total' => $status ? (int) ($status->unseen ?? 0) : 0,
+                'recent_messages' => $recent,
+                'non_empty_folders' => $folders,
+            ];
+        } finally {
+            imap_close($connection);
+        }
     }
 
     /**
