@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\EmailDomain;
 use App\Models\EmailTemplate;
+use App\Services\DomainMailConfigService;
 use Illuminate\Support\Str;
 
 class AbstercoCrmSeeder extends Seeder
@@ -42,21 +43,31 @@ class AbstercoCrmSeeder extends Seeder
         $domain->daily_limit  = 2000;
         $domain->hourly_limit = 200;
 
-        // Per-domain SMTP configuration (system@crm.absterco.com)
-        $domain->mail_config = [
+        // Per-domain SMTP + inbound IMAP (deal reply polling when inbound.enabled)
+        $mailConfigService = app(DomainMailConfigService::class);
+        $domain->mail_config = $mailConfigService->prepareForStorage(null, [
             'transport'  => 'smtp',
             'host'       => 'uniform.de.hostns.io',
             'port'       => 465,
             'encryption' => 'ssl',
             'username'   => 'system@crm.absterco.com',
             'password'   => 'system@2026',
-        ];
+            'inbound'    => [
+                'enabled'    => true,
+                'host'       => 'uniform.de.hostns.io',
+                'port'       => 993,
+                'encryption' => 'ssl',
+                'folder'     => 'INBOX',
+                // username/password fall back to SMTP credentials above
+            ],
+        ]);
 
         $domain->save();
 
         $this->command->info("✅ Domain registered: {$domain->domain}");
         $this->command->info("   From email : {$domain->from_email}");
         $this->command->info("   SMTP host  : uniform.de.hostns.io:465 (SSL)");
+        $this->command->info("   Inbound IMAP: enabled (polls same mailbox for deal replies)");
         $this->command->info("   API Key    : " . self::RAW_API_KEY);
         $this->command->newLine();
 

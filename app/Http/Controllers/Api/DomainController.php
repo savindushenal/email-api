@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\EmailDomain;
 use App\Services\EmailService;
+use App\Services\DomainMailConfigService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -14,10 +15,12 @@ use Illuminate\Support\Str;
 class DomainController extends Controller
 {
     protected EmailService $emailService;
+    protected DomainMailConfigService $mailConfigService;
 
-    public function __construct(EmailService $emailService)
+    public function __construct(EmailService $emailService, DomainMailConfigService $mailConfigService)
     {
         $this->emailService = $emailService;
+        $this->mailConfigService = $mailConfigService;
     }
 
     /**
@@ -74,14 +77,7 @@ class DomainController extends Controller
                     'id', 'domain', 'from_email', 'from_name',
                     'mailer', 'status', 'daily_limit', 'hourly_limit', 'created_at', 'updated_at'
                 ]),
-                'mail_config' => $emailDomain->mail_config ? [
-                    'transport' => $emailDomain->mail_config['transport'] ?? 'smtp',
-                    'host' => $emailDomain->mail_config['host'] ?? null,
-                    'port' => $emailDomain->mail_config['port'] ?? null,
-                    'encryption' => $emailDomain->mail_config['encryption'] ?? null,
-                    // Don't expose username/password for security
-                    'configured' => true,
-                ] : ['configured' => false],
+                'mail_config' => $this->mailConfigService->publicView($emailDomain->mail_config),
                 'statistics' => [
                     'templates' => $templateCount,
                     'emails_sent' => $emailsSent,
@@ -111,6 +107,14 @@ class DomainController extends Controller
             'mail_config.encryption' => 'sometimes|in:ssl,tls,null',
             'mail_config.username' => 'required_with:mail_config|string',
             'mail_config.password' => 'required_with:mail_config|string',
+            'mail_config.inbound' => 'sometimes|array',
+            'mail_config.inbound.enabled' => 'sometimes|boolean',
+            'mail_config.inbound.host' => 'nullable|string|max:255',
+            'mail_config.inbound.port' => 'sometimes|integer|min:1|max:65535',
+            'mail_config.inbound.encryption' => 'sometimes|in:ssl,tls,none',
+            'mail_config.inbound.folder' => 'sometimes|string|max:255',
+            'mail_config.inbound.username' => 'nullable|email|max:255',
+            'mail_config.inbound.password' => 'nullable|string|max:255',
             // SES Configuration (alternative)
             'ses_key' => 'sometimes|string',
             'ses_secret' => 'sometimes|string',
@@ -145,9 +149,9 @@ class DomainController extends Controller
 
         // Save mail config if provided
         if ($request->has('mail_config')) {
-            $domain->mail_config = array_merge(
-                ['transport' => 'smtp'],
-                $request->mail_config
+            $domain->mail_config = $this->mailConfigService->prepareForStorage(
+                null,
+                array_merge(['transport' => 'smtp'], $request->mail_config)
             );
             $domain->save();
         }
@@ -197,7 +201,15 @@ class DomainController extends Controller
             'mail_config.port' => 'required_with:mail_config|integer',
             'mail_config.encryption' => 'sometimes|in:ssl,tls,null',
             'mail_config.username' => 'required_with:mail_config|string',
-            'mail_config.password' => 'required_with:mail_config|string',
+            'mail_config.password' => 'sometimes|nullable|string',
+            'mail_config.inbound' => 'sometimes|array',
+            'mail_config.inbound.enabled' => 'sometimes|boolean',
+            'mail_config.inbound.host' => 'nullable|string|max:255',
+            'mail_config.inbound.port' => 'sometimes|integer|min:1|max:65535',
+            'mail_config.inbound.encryption' => 'sometimes|in:ssl,tls,none',
+            'mail_config.inbound.folder' => 'sometimes|string|max:255',
+            'mail_config.inbound.username' => 'nullable|email|max:255',
+            'mail_config.inbound.password' => 'nullable|string|max:255',
             // SES Configuration
             'ses_key' => 'sometimes|string',
             'ses_secret' => 'sometimes|string',
@@ -220,9 +232,9 @@ class DomainController extends Controller
 
         // Update mail config if provided
         if ($request->has('mail_config')) {
-            $emailDomain->mail_config = array_merge(
-                ['transport' => 'smtp'],
-                $request->mail_config
+            $emailDomain->mail_config = $this->mailConfigService->prepareForStorage(
+                $emailDomain->mail_config,
+                array_merge(['transport' => 'smtp'], $request->mail_config)
             );
         }
 

@@ -32,6 +32,11 @@ class EmailController extends Controller
             'template' => 'required|string',
             'to' => 'required|email',
             'data' => 'required|array',
+            'cc' => 'sometimes|array|max:10',
+            'cc.*' => 'email',
+            'bcc' => 'sometimes|array|max:10',
+            'bcc.*' => 'email',
+            'reply_to' => 'sometimes|email',
         ]);
 
         if ($validator->fails()) {
@@ -55,12 +60,19 @@ class EmailController extends Controller
             ], 403);
         }
 
+        $sendOptions = array_filter([
+            'cc' => $request->input('cc'),
+            'bcc' => $request->input('bcc'),
+            'reply_to' => $request->input('reply_to'),
+        ], fn ($value) => $value !== null);
+
         // Send email
         $result = $this->emailService->send(
             $authenticatedDomain,
             $request->input('template'),
             $request->input('to'),
-            $request->input('data')
+            $request->input('data'),
+            $sendOptions
         );
 
         return response()->json($result, $result['success'] ? 200 : 500);

@@ -13,6 +13,11 @@ use Exception;
 
 class EmailService
 {
+    public function __construct(
+        protected DomainMailConfigService $mailConfigService
+    ) {
+    }
+
     /**
      * Send email using the appropriate mailer.
      *
@@ -22,11 +27,15 @@ class EmailService
      * @param array $data
      * @return array
      */
+    /**
+     * @param array<string, mixed> $sendOptions  Optional: cc (string[]), bcc (string[]), reply_to (string)
+     */
     public function send(
         EmailDomain $domain,
         string $templateKey,
         string $toEmail,
-        array $data
+        array $data,
+        array $sendOptions = []
     ): array {
         try {
             // Validate domain is active
@@ -80,6 +89,15 @@ class EmailService
                 'variables' => $data,
             ]);
 
+            $cc = $this->normalizeRecipientList($sendOptions['cc'] ?? [], $toEmail);
+            $bcc = $this->normalizeRecipientList($sendOptions['bcc'] ?? [], $toEmail, $cc);
+            $replyTo = isset($sendOptions['reply_to']) && is_string($sendOptions['reply_to'])
+                ? trim($sendOptions['reply_to'])
+                : null;
+            if ($replyTo !== null && $replyTo !== '' && !$this->validateEmail($replyTo)) {
+                throw new Exception('Invalid reply_to address');
+            }
+
             // Configure mailer based on domain settings
             $this->configureMailer($domain);
 
@@ -88,7 +106,10 @@ class EmailService
                 $renderedHtml,
                 $renderedSubject,
                 $domain->from_email,
-                $domain->from_name
+                $domain->from_name,
+                $cc,
+                $bcc,
+                $replyTo ?: null
             );
 
             Mail::to($toEmail)->send($mailable);
@@ -173,7 +194,7 @@ class EmailService
                 'port' => $mailConfig['port'] ?? 465,
                 'encryption' => $mailConfig['encryption'] ?? 'ssl',
                 'username' => $mailConfig['username'] ?? null,
-                'password' => $mailConfig['password'] ?? null,
+                'password' => $this->mailConfigService->smtpPassword($mailConfig),
                 'timeout' => null,
             ]);
         } else {
@@ -205,6 +226,39 @@ class EmailService
     public function validateEmail(string $email): bool
     {
         return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    }
+
+    /**
+     * @param mixed $emails
+     * @param string[] $extraExclude
+     * @return string[]
+     */
+    protected function normalizeRecipientList($emails, string $toEmail, array $extraExclude = []): array
+    {
+        if (!is_array($emails)) {
+            return [];
+        }
+
+        $exclude = array_map('strtolower', array_merge([$toEmail], $extraExclude));
+        $seen = [];
+        $normalized = [];
+
+        foreach ($emails as $email) {
+            if (!is_string($email)) {
+                continue;
+            }
+            $trimmed = strtolower(trim($email));
+            if ($trimmed === '' || !$this->validateEmail($trimmed)) {
+                continue;
+            }
+            if (in_array($trimmed, $exclude, true) || isset($seen[$trimmed])) {
+                continue;
+            }
+            $seen[$trimmed] = true;
+            $normalized[] = $trimmed;
+        }
+
+        return $normalized;
     }
 
     /**

@@ -18,35 +18,53 @@ class DynamicTemplateMail extends Mailable
     public string $fromEmail;
     public string $fromName;
 
+    /** @var string[] */
+    public array $ccRecipients;
+
+    /** @var string[] */
+    public array $bccRecipients;
+
+    public ?string $replyToAddress;
+
     /**
-     * Create a new message instance.
+     * @param string[] $ccRecipients
+     * @param string[] $bccRecipients
      */
     public function __construct(
         string $htmlContent,
         string $subject,
         string $fromEmail,
-        string $fromName
+        string $fromName,
+        array $ccRecipients = [],
+        array $bccRecipients = [],
+        ?string $replyToAddress = null
     ) {
         $this->htmlContent = $htmlContent;
         $this->emailSubject = $subject;
         $this->fromEmail = $fromEmail;
         $this->fromName = $fromName;
+        $this->ccRecipients = $ccRecipients;
+        $this->bccRecipients = $bccRecipients;
+        $this->replyToAddress = $replyToAddress;
     }
 
-    /**
-     * Get the message envelope.
-     */
     public function envelope(): Envelope
     {
+        $cc = array_map(fn (string $email) => new Address($email), $this->ccRecipients);
+        $bcc = array_map(fn (string $email) => new Address($email), $this->bccRecipients);
+        $replyTo = $this->replyToAddress
+            ? [new Address($this->replyToAddress)]
+            : [];
+
         return new Envelope(
             from: new Address($this->fromEmail, $this->fromName),
+            replyTo: $replyTo,
+            cc: $cc,
+            bcc: $bcc,
             subject: $this->emailSubject,
         );
     }
 
-    /**
-     * Get the message content definition.
-     */
     public function content(): Content
     {
         return new Content(
@@ -54,11 +72,6 @@ class DynamicTemplateMail extends Mailable
         );
     }
 
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
-     */
     public function attachments(): array
     {
         return [];
