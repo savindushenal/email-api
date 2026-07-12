@@ -16,6 +16,7 @@ class EmailDomain extends Model
         'from_email',
         'from_name',
         'mailer',
+        'mail_config',
         'status',
         'api_key',
         'ses_key',
@@ -32,6 +33,7 @@ class EmailDomain extends Model
     ];
 
     protected $casts = [
+        'mail_config' => 'array',
         'daily_limit' => 'integer',
         'hourly_limit' => 'integer',
     ];
@@ -64,6 +66,14 @@ class EmailDomain extends Model
     public function logs(): HasMany
     {
         return $this->hasMany(EmailLog::class, 'domain_id');
+    }
+
+    /**
+     * Staff outreach mailboxes for this domain.
+     */
+    public function staffMailboxes(): HasMany
+    {
+        return $this->hasMany(StaffMailbox::class, 'email_domain_id');
     }
 
     /**

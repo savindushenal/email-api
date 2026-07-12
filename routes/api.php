@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\EmailController;
 use App\Http\Controllers\Api\TemplateController;
 use App\Http\Controllers\Api\DomainController;
+use App\Http\Controllers\Api\StaffMailboxController;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,6 +35,13 @@ Route::middleware(['admin.key'])->prefix('admin')->group(function () {
         Route::post('/{domain}/regenerate-key', [DomainController::class, 'regenerateApiKey']); // Regenerate API key
         Route::post('/{domain}/test-email', [DomainController::class, 'testEmail']); // Test email config
         Route::get('/{domain}/api-key', [DomainController::class, 'getApiKey']);     // Get domain API key (recovery)
+    });
+
+    Route::prefix('mailboxes')->group(function () {
+        Route::get('/', [StaffMailboxController::class, 'index']);
+        Route::post('/', [StaffMailboxController::class, 'store']);
+        Route::put('/{email}', [StaffMailboxController::class, 'update'])->where('email', '.*');
+        Route::delete('/{email}', [StaffMailboxController::class, 'destroy'])->where('email', '.*');
     });
 });
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\EmailDomain;
 use App\Services\EmailService;
+use App\Services\EmailSendOptions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -32,6 +33,11 @@ class EmailController extends Controller
             'template' => 'required|string',
             'to' => 'required|email',
             'data' => 'required|array',
+            'from_email' => 'sometimes|email',
+            'from_name' => 'sometimes|string|max:255',
+            'reply_to' => 'sometimes|email',
+            'cc' => 'sometimes',
+            'bcc' => 'sometimes',
         ]);
 
         if ($validator->fails()) {
@@ -56,11 +62,13 @@ class EmailController extends Controller
         }
 
         // Send email
+        $options = EmailSendOptions::fromArray($request->all());
         $result = $this->emailService->send(
             $authenticatedDomain,
             $request->input('template'),
             $request->input('to'),
-            $request->input('data')
+            $request->input('data'),
+            $options
         );
 
         return response()->json($result, $result['success'] ? 200 : 500);

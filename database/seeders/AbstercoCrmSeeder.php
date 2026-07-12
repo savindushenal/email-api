@@ -23,33 +23,39 @@ class AbstercoCrmSeeder extends Seeder
         $this->command->newLine();
 
         // -------------------------------------------------------
-        // 1. Register domain
+        // 1. Register email.absterco.com domain (staff mailboxes + transactional)
         // -------------------------------------------------------
-        $existing = EmailDomain::where('domain', 'crm.absterco.com')->first();
+        $existing = EmailDomain::where('domain', 'email.absterco.com')->first();
         if ($existing) {
-            $this->command->warn('Domain crm.absterco.com already exists — updating config...');
+            $this->command->warn('Domain email.absterco.com already exists — updating config...');
             $domain = $existing;
         } else {
             $domain = new EmailDomain();
         }
 
-        $domain->domain      = 'crm.absterco.com';
+        $domain->domain      = 'email.absterco.com';
         $domain->api_key     = hash('sha256', self::RAW_API_KEY);
-        $domain->from_email  = 'system@crm.absterco.com';
-        $domain->from_name   = 'Absterco CRM';
-        $domain->mailer      = 'exim';   // enum: exim|ses — actual transport set in mail_config
+        $domain->from_email  = 'noreply@email.absterco.com';
+        $domain->from_name   = 'Absterco';
+        $domain->mailer      = 'exim';
         $domain->status      = 'active';
         $domain->daily_limit  = 2000;
         $domain->hourly_limit = 200;
 
-        // Per-domain SMTP configuration (system@crm.absterco.com)
         $domain->mail_config = [
             'transport'  => 'smtp',
             'host'       => 'uniform.de.hostns.io',
             'port'       => 465,
             'encryption' => 'ssl',
-            'username'   => 'system@crm.absterco.com',
-            'password'   => 'system@2026',
+            'username'   => 'noreply@email.absterco.com',
+            'password'   => env('EMAIL_DOMAIN_SMTP_PASSWORD', ''),
+            'inbound'    => [
+                'enabled'    => true,
+                'host'       => 'uniform.de.hostns.io',
+                'port'       => 993,
+                'encryption' => 'ssl',
+                'folder'     => 'INBOX',
+            ],
         ];
 
         $domain->save();
@@ -76,9 +82,9 @@ class AbstercoCrmSeeder extends Seeder
         $this->command->info('  Setup complete!  Copy values below to CRM .env');
         $this->command->info('================================================');
         $this->command->newLine();
-        $this->command->line('EMAIL_API_BASE_URL=http://localhost:8001');
+        $this->command->line('EMAIL_API_BASE_URL=https://email.absterco.com');
         $this->command->line('EMAIL_API_KEY=' . self::RAW_API_KEY);
-        $this->command->line('EMAIL_API_DOMAIN=crm.absterco.com');
+        $this->command->line('EMAIL_API_DOMAIN=email.absterco.com');
         $this->command->newLine();
     }
 
