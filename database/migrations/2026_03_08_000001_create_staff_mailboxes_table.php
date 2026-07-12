@@ -36,7 +36,7 @@ return new class extends Migration
             $table->string('message_uid', 255);
             $table->string('message_id', 255)->nullable();
             $table->timestamp('processed_at')->useCurrent();
-            $table->unique(['staff_mailbox_id', 'message_uid']);
+            $table->unique(['staff_mailbox_id', 'message_uid'], 'staff_mbox_msg_uid_uniq');
         });
     }
 
