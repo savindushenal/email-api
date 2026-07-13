@@ -65,7 +65,8 @@ class PollInboundMail extends Command
             } elseif ($stats['forwarded'] === 0 && $stats['errors'] > 0) {
                 $this->warn('Messages were found but forwarding failed — check storage/logs/laravel.log for [imap] entries.');
             } elseif ($stats['forwarded'] === 0 && $stats['skipped'] > 0) {
-                $this->warn('Messages were skipped (missing from/subject/body) — check the mailbox has the prospect reply.');
+                $this->warn('Messages were skipped (invalid From or empty body after MIME parse) — see storage/logs/laravel.log for [imap] Skipped message entries.');
+                $this->warn('If the reply was already opened in webmail, re-run: php artisan email:poll-inbound --include-seen');
             }
 
             return self::SUCCESS;

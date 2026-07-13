@@ -202,9 +202,10 @@ class InboundImapService
             foreach ($uids as $uid) {
                 $stats['processed']++;
                 try {
-                    $payload = $this->parseMessage($connection, (int) $uid);
+                    $payload = $this->parseMessage($connection, (int) $uid, $config['username'] ?? null);
                     if ($payload === null) {
                         $stats['skipped']++;
+                        // Mark seen so webmail does not re-poll forever; use --include-seen to reprocess.
                         imap_setflag_full($connection, (string) $uid, '\\Seen');
                         continue;
                     }
@@ -385,30 +386,45 @@ class InboundImapService
     /**
      * @return array<string, mixed>|null
      */
-    protected function parseMessage($connection, int $uid): ?array
+    protected function parseMessage($connection, int $uid, ?string $mailboxLabel = null): ?array
     {
         $header = imap_headerinfo($connection, $uid);
         if (!$header) {
+            Log::warning('[imap] Skipped message — no header', [
+                'mailbox' => $mailboxLabel,
+                'uid' => $uid,
+            ]);
             return null;
         }
 
-        $from = '';
-        if (!empty($header->from[0])) {
-            $mailbox = $header->from[0]->mailbox ?? '';
-            $host = $header->from[0]->host ?? '';
-            $from = strtolower(trim($mailbox . '@' . $host));
-        }
+        $rawHeader = imap_fetchheader($connection, $uid) ?: '';
+        $from = $this->extractEmailAddress($header->from ?? null)
+            ?: $this->extractEmailAddress($header->reply_to ?? null)
+            ?: $this->extractEmailAddress($header->sender ?? null)
+            ?: $this->extractEmailFromRawHeader($rawHeader, 'From')
+            ?: $this->extractEmailFromRawHeader($rawHeader, 'Reply-To');
+
         if ($from === '' || !filter_var($from, FILTER_VALIDATE_EMAIL)) {
+            Log::warning('[imap] Skipped message — missing or invalid From', [
+                'mailbox' => $mailboxLabel,
+                'uid' => $uid,
+                'subject' => isset($header->subject) ? imap_utf8((string) $header->subject) : null,
+            ]);
             return null;
         }
 
         $structure = imap_fetchstructure($connection, $uid);
         $body = $this->extractBody($connection, $uid, $structure);
         if (trim($body) === '') {
+            Log::warning('[imap] Skipped message — empty body after MIME parse', [
+                'mailbox' => $mailboxLabel,
+                'uid' => $uid,
+                'from' => $from,
+                'subject' => isset($header->subject) ? imap_utf8((string) $header->subject) : null,
+            ]);
             return null;
         }
 
-        $rawHeader = imap_fetchheader($connection, $uid) ?: '';
         $messageId = isset($header->message_id) ? trim($header->message_id, '<>') : null;
         $inReplyTo = $this->extractHeaderValue($rawHeader, 'In-Reply-To');
         $deliveredTo = $this->extractHeaderValue($rawHeader, 'Delivered-To');
@@ -469,42 +485,167 @@ class InboundImapService
         return null;
     }
 
+    /**
+     * @param object|array|null $addresses
+     */
+    protected function extractEmailAddress($addresses): string
+    {
+        if (empty($addresses)) {
+            return '';
+        }
+
+        $list = is_array($addresses) ? $addresses : [$addresses];
+        foreach ($list as $addr) {
+            $mailbox = $addr->mailbox ?? '';
+            $host = $addr->host ?? '';
+            if ($mailbox === '' || $host === '') {
+                continue;
+            }
+            $email = strtolower(trim($mailbox . '@' . $host));
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return $email;
+            }
+        }
+
+        return '';
+    }
+
+    protected function extractEmailFromRawHeader(string $rawHeader, string $headerName): string
+    {
+        if (!preg_match('/^' . preg_quote($headerName, '/') . ':\s*(.+)$/im', $rawHeader, $m)) {
+            return '';
+        }
+
+        $value = imap_utf8(trim($m[1]));
+        if (preg_match('/<([^>]+@[^>]+)>/', $value, $angle)) {
+            $email = strtolower(trim($angle[1]));
+            return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+        }
+
+        $email = strtolower(trim($value));
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+    }
+
     protected function extractBody($connection, int $uid, $structure): string
     {
         if (!$structure) {
             $raw = imap_body($connection, $uid) ?: '';
-            return $this->decodePart($raw, 0);
+            return $this->normalizeBodyText($this->decodePart($raw, 0));
         }
 
         if (!isset($structure->parts)) {
             $raw = imap_body($connection, $uid) ?: '';
-            return trim($this->decodePart($raw, $structure->encoding ?? 0));
+            return $this->normalizeBodyText(
+                $this->convertCharset($this->decodePart($raw, $structure->encoding ?? 0), $structure)
+            );
         }
 
+        [$plain, $html] = $this->collectTextParts($connection, $uid, $structure, '');
+        $text = trim($plain) !== '' ? $plain : strip_tags($html);
+        if (trim($text) !== '') {
+            return $this->normalizeBodyText($text);
+        }
+
+        $raw = imap_body($connection, $uid) ?: '';
+        return $this->normalizeBodyText(
+            $this->convertCharset($this->decodePart($raw, $structure->encoding ?? 0), $structure)
+        );
+    }
+
+    /**
+     * Walk nested multipart MIME (e.g. iPhone multipart/alternative inside multipart/mixed).
+     *
+     * @return array{0: string, 1: string} plain text, html
+     */
+    protected function collectTextParts($connection, int $uid, $structure, string $prefix): array
+    {
         $plain = '';
         $html = '';
-        foreach ($structure->parts as $index => $part) {
-            $partNum = (string) ($index + 1);
-            $raw = imap_fetchbody($connection, $uid, $partNum) ?: '';
-            $decoded = $this->decodePart($raw, $part->encoding ?? 0);
-            $type = $part->type ?? 0;
-            $subtype = strtolower($part->subtype ?? '');
-            if ($type === 0 && $subtype === 'plain' && $plain === '') {
-                $plain = $decoded;
+
+        if (!isset($structure->parts) || $structure->parts === []) {
+            $type = $structure->type ?? 0;
+            $subtype = strtolower($structure->subtype ?? '');
+
+            if ($type === 1) {
+                return ['', ''];
             }
-            if ($type === 0 && $subtype === 'html' && $html === '') {
-                $html = $decoded;
+
+            $raw = $prefix === ''
+                ? (imap_body($connection, $uid) ?: '')
+                : (imap_fetchbody($connection, $uid, $prefix) ?: '');
+            $decoded = $this->convertCharset(
+                $this->decodePart($raw, $structure->encoding ?? 0),
+                $structure
+            );
+
+            if ($type === 0 && $subtype === 'plain') {
+                return [$decoded, ''];
+            }
+            if ($type === 0 && ($subtype === 'html' || $subtype === 'xml')) {
+                return ['', $decoded];
+            }
+
+            return ['', ''];
+        }
+
+        foreach ($structure->parts as $index => $part) {
+            $partNum = $prefix === '' ? (string) ($index + 1) : $prefix . '.' . ($index + 1);
+            [$partPlain, $partHtml] = $this->collectTextParts($connection, $uid, $part, $partNum);
+            if ($plain === '' && trim($partPlain) !== '') {
+                $plain = $partPlain;
+            }
+            if ($html === '' && trim($partHtml) !== '') {
+                $html = $partHtml;
             }
         }
 
-        $text = trim($plain) !== '' ? $plain : strip_tags($html);
-        return trim(preg_replace("/\r\n?|\n/", "\n", $text));
+        return [$plain, $html];
+    }
+
+    protected function normalizeBodyText(string $text): string
+    {
+        $text = str_replace("\xEF\xBB\xBF", '', $text);
+        $text = preg_replace("/\r\n?|\n/", "\n", $text) ?? $text;
+        return trim($text);
+    }
+
+    protected function convertCharset(string $text, $structure): string
+    {
+        if ($text === '') {
+            return '';
+        }
+
+        $charset = $this->structureCharset($structure);
+        if ($charset !== '' && strtoupper($charset) !== 'UTF-8' && function_exists('iconv')) {
+            $converted = @iconv($charset, 'UTF-8//IGNORE', $text);
+            if ($converted !== false) {
+                return $converted;
+            }
+        }
+
+        return imap_utf8($text);
+    }
+
+    protected function structureCharset($structure): string
+    {
+        foreach ([$structure->parameters ?? null, $structure->dparameters ?? null] as $params) {
+            if (empty($params)) {
+                continue;
+            }
+            foreach ($params as $param) {
+                if (strtolower($param->attribute ?? '') === 'charset' && !empty($param->value)) {
+                    return (string) $param->value;
+                }
+            }
+        }
+
+        return '';
     }
 
     protected function decodePart(string $text, int $encoding): string
     {
         return match ($encoding) {
-            ENCBASE64 => base64_decode($text) ?: '',
+            ENCBASE64 => base64_decode(str_replace(["\r", "\n"], '', $text)) ?: '',
             ENCQUOTEDPRINTABLE => quoted_printable_decode($text),
             default => $text,
         };
