@@ -213,6 +213,9 @@ class InboundImapService
                     if (!empty($config['domain'])) {
                         $payload['sourceDomain'] = $config['domain'];
                     }
+                    if (!empty($config['username'])) {
+                        $payload['mailboxEmail'] = strtolower(trim((string) $config['username']));
+                    }
 
                     $result = $this->forwardToCrm($payload);
                     if ($result === 'forwarded') {
@@ -434,6 +437,8 @@ class InboundImapService
 
         $replyToken = null;
         if (preg_match('/reply\+([A-Za-z0-9_-]+)@/i', $rawHeader, $m)) {
+            $replyToken = $m[1];
+        } elseif (preg_match('/\+reply\.([A-Za-z0-9_-]+)@/i', $rawHeader, $m)) {
             $replyToken = $m[1];
         }
 
@@ -692,6 +697,7 @@ class InboundImapService
                 'inReplyTo' => $payload['inReplyTo'] ?? null,
                 'references' => $payload['references'] ?? null,
                 'replyToken' => $payload['replyToken'] ?? null,
+                'mailboxEmail' => $payload['mailboxEmail'] ?? null,
             ]);
             return 'unmatched';
         }
