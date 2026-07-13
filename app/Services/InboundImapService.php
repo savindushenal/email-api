@@ -427,6 +427,7 @@ class InboundImapService
 
         $messageId = isset($header->message_id) ? trim($header->message_id, '<>') : null;
         $inReplyTo = $this->extractHeaderValue($rawHeader, 'In-Reply-To');
+        $references = $this->extractHeaderValue($rawHeader, 'References');
         $deliveredTo = $this->extractHeaderValue($rawHeader, 'Delivered-To');
         $to = $this->formatAddressList($header->to ?? []);
         $cc = $this->formatAddressList($header->cc ?? []);
@@ -450,7 +451,8 @@ class InboundImapService
             'subject' => isset($header->subject) ? imap_utf8((string) $header->subject) : null,
             'body' => $body,
             'messageId' => $messageId,
-            'inReplyTo' => $inReplyTo ? trim($inReplyTo, '<>') : null,
+            'inReplyTo' => $inReplyTo,
+            'references' => $references,
             'receivedAt' => $receivedAt,
             'deliveredTo' => $deliveredTo,
             'to' => $to,
@@ -479,10 +481,12 @@ class InboundImapService
 
     protected function extractHeaderValue(string $rawHeader, string $name): ?string
     {
-        if (preg_match('/^' . preg_quote($name, '/') . ':\s*(.+)$/im', $rawHeader, $m)) {
-            return trim($m[1]);
+        if (!preg_match('/^' . preg_quote($name, '/') . ':\s*((?:.+(?:\r?\n[ \t].+)*)+)/im', $rawHeader, $m)) {
+            return null;
         }
-        return null;
+
+        $value = preg_replace('/\r?\n[ \t]+/', ' ', trim($m[1])) ?? trim($m[1]);
+        return $value !== '' ? $value : null;
     }
 
     /**
@@ -686,6 +690,7 @@ class InboundImapService
                 'from' => $payload['from'] ?? null,
                 'subject' => $payload['subject'] ?? null,
                 'inReplyTo' => $payload['inReplyTo'] ?? null,
+                'references' => $payload['references'] ?? null,
                 'replyToken' => $payload['replyToken'] ?? null,
             ]);
             return 'unmatched';
