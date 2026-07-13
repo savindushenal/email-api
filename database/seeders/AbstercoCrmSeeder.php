@@ -30,16 +30,17 @@ class AbstercoCrmSeeder extends Seeder
         $crmDomain = $this->upsertDomain(
             'crm.absterco.com',
             hash('sha256', self::RAW_API_KEY_CRM),
-            'noreply@crm.absterco.com',
+            'system@crm.absterco.com',
             $mailConfigService->prepareForStorage(null, [
                 'transport'  => 'smtp',
                 'host'       => 'uniform.de.hostns.io',
                 'port'       => 465,
                 'encryption' => 'ssl',
-                'username'   => 'noreply@crm.absterco.com',
+                'username'   => 'system@crm.absterco.com',
                 'password'   => env('CRM_DOMAIN_SMTP_PASSWORD', env('EMAIL_DOMAIN_SMTP_PASSWORD', '')),
                 'inbound'    => ['enabled' => false],
-            ])
+            ]),
+            'Absterco CRM'
         );
 
         $this->command->info("✅ Domain registered: {$crmDomain->domain}");
@@ -116,7 +117,8 @@ class AbstercoCrmSeeder extends Seeder
         string $domainName,
         string $apiKeyHash,
         string $fromEmail,
-        array $mailConfig
+        array $mailConfig,
+        string $fromName = 'Absterco'
     ): EmailDomain {
         $existing = EmailDomain::where('domain', $domainName)->first();
         if ($existing) {
@@ -129,7 +131,7 @@ class AbstercoCrmSeeder extends Seeder
         $domain->domain       = $domainName;
         $domain->api_key      = $apiKeyHash;
         $domain->from_email   = $fromEmail;
-        $domain->from_name    = 'Absterco';
+        $domain->from_name    = $fromName;
         $domain->mailer       = 'exim';
         $domain->status       = 'active';
         $domain->daily_limit  = 2000;

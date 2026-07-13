@@ -10,8 +10,13 @@ echo ""
 
 if ! grep -q '^CRM_DOMAIN_SMTP_PASSWORD=' .env 2>/dev/null; then
   echo "Add to .env (use quotes if password contains @):"
-  echo "  CRM_DOMAIN_SMTP_PASSWORD='...'    # noreply@crm.absterco.com"
+  echo "  CRM_DOMAIN_SMTP_PASSWORD='...'    # system@crm.absterco.com"
   echo "  EMAIL_DOMAIN_SMTP_PASSWORD='...'  # noreply@email.absterco.com"
+  echo ""
+fi
+
+if ! grep -q '^APP_KEY=base64:' .env 2>/dev/null; then
+  echo "WARNING: APP_KEY missing — run: php artisan key:generate --force"
   echo ""
 fi
 
