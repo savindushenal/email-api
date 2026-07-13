@@ -29,6 +29,8 @@ class EmailController extends Controller
             'from_email' => 'sometimes|email',
             'from_name' => 'sometimes|string|max:255',
             'reply_to' => 'sometimes|email',
+            'in_reply_to' => 'sometimes|string|max:500',
+            'references' => 'sometimes|string|max:2000',
             'cc' => 'sometimes|array|max:10',
             'cc.*' => 'email',
             'bcc' => 'sometimes|array|max:10',

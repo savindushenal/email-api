@@ -8,6 +8,8 @@ class EmailSendOptions
         public ?string $fromEmail = null,
         public ?string $fromName = null,
         public ?string $replyTo = null,
+        public ?string $inReplyTo = null,
+        public ?string $references = null,
         /** @var string[] */
         public array $cc = [],
         /** @var string[] */
@@ -31,6 +33,8 @@ class EmailSendOptions
             fromEmail: $data['from_email'] ?? null,
             fromName: $data['from_name'] ?? null,
             replyTo: $data['reply_to'] ?? null,
+            inReplyTo: $data['in_reply_to'] ?? null,
+            references: $data['references'] ?? null,
             cc: is_array($cc) ? array_values($cc) : [],
             bcc: is_array($bcc) ? array_values($bcc) : [],
         );

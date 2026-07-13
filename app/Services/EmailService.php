@@ -102,6 +102,10 @@ class EmailService
             }
 
             $messageIdHeader = $this->generateMessageId($domain->domain);
+            $inReplyTo = $this->formatThreadHeader($options->inReplyTo);
+            $references = $options->references !== null && trim($options->references) !== ''
+                ? trim($options->references)
+                : $inReplyTo;
 
             $mailable = new DynamicTemplateMail(
                 $renderedHtml,
@@ -111,7 +115,9 @@ class EmailService
                 $cc,
                 $bcc,
                 $replyTo ?: null,
-                $messageIdHeader
+                $messageIdHeader,
+                $inReplyTo,
+                $references
             );
 
             Mail::to($toEmail)->send($mailable);
@@ -216,6 +222,16 @@ class EmailService
     protected function generateMessageId(string $domain): string
     {
         return sprintf('<%s@%s>', 'eak_' . bin2hex(random_bytes(16)), $domain);
+    }
+
+    protected function formatThreadHeader(?string $messageId): ?string
+    {
+        if ($messageId === null || trim($messageId) === '') {
+            return null;
+        }
+
+        $id = trim($messageId, " \t\n\r\0\x0B<>");
+        return $id === '' ? null : sprintf('<%s>', $id);
     }
 
     public function validateEmail(string $email): bool

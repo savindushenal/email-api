@@ -27,6 +27,8 @@ class DynamicTemplateMail extends Mailable
 
     public ?string $replyToAddress;
     public ?string $messageIdHeader;
+    public ?string $inReplyToHeader;
+    public ?string $referencesHeader;
 
     /**
      * @param string[] $ccRecipients
@@ -40,7 +42,9 @@ class DynamicTemplateMail extends Mailable
         array $ccRecipients = [],
         array $bccRecipients = [],
         ?string $replyToAddress = null,
-        ?string $messageIdHeader = null
+        ?string $messageIdHeader = null,
+        ?string $inReplyToHeader = null,
+        ?string $referencesHeader = null
     ) {
         $this->htmlContent = $htmlContent;
         $this->emailSubject = $subject;
@@ -50,6 +54,8 @@ class DynamicTemplateMail extends Mailable
         $this->bccRecipients = $bccRecipients;
         $this->replyToAddress = $replyToAddress;
         $this->messageIdHeader = $messageIdHeader;
+        $this->inReplyToHeader = $inReplyToHeader;
+        $this->referencesHeader = $referencesHeader;
     }
 
     public function envelope(): Envelope
@@ -69,13 +75,32 @@ class DynamicTemplateMail extends Mailable
 
     public function headers(): Headers
     {
+        $text = [];
+        $inReplyTo = $this->formatMessageIdHeader($this->inReplyToHeader);
+        if ($inReplyTo !== null) {
+            $text['In-Reply-To'] = $inReplyTo;
+        }
+        if ($this->referencesHeader !== null && trim($this->referencesHeader) !== '') {
+            $text['References'] = trim($this->referencesHeader);
+        }
+
         if ($this->messageIdHeader === null) {
-            return new Headers();
+            return $text === [] ? new Headers() : new Headers(text: $text);
         }
 
         return new Headers(
             messageId: trim($this->messageIdHeader, '<>'),
+            text: $text === [] ? [] : $text,
         );
+    }
+
+    protected function formatMessageIdHeader(?string $messageId): ?string
+    {
+        if ($messageId === null) {
+            return null;
+        }
+        $id = trim($messageId, " \t\n\r\0\x0B<>");
+        return $id === '' ? null : sprintf('<%s>', $id);
     }
 
     public function content(): Content
