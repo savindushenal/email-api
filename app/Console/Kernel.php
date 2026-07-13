@@ -12,7 +12,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        $schedule->command('email:poll-inbound')->everyThreeMinutes();
+        $schedule->command('email:poll-inbound --days=30')->everyThreeMinutes();
     }
 
     /**

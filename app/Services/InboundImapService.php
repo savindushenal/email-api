@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\StaffMailbox;
+use App\Models\StaffMailboxProcessedMessage;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Support\Facades\Log;
@@ -40,6 +41,7 @@ class InboundImapService
             'skipped' => 0,
             'errors' => 0,
             'unmatched' => 0,
+            'already_forwarded' => 0,
             'mailboxes' => count($mailboxes),
             'details' => [],
         ];
@@ -48,8 +50,8 @@ class InboundImapService
             $label = $config['username'];
             try {
                 $mailboxStats = $this->pollMailbox($config, $includeSeen, $days);
-                foreach (['processed', 'forwarded', 'skipped', 'errors', 'unmatched'] as $key) {
-                    $stats[$key] += $mailboxStats[$key];
+                foreach (['processed', 'forwarded', 'skipped', 'errors', 'unmatched', 'already_forwarded'] as $key) {
+                    $stats[$key] += $mailboxStats[$key] ?? 0;
                 }
                 $stats['details'][] = [
                     'mailbox' => $label,
@@ -91,6 +93,7 @@ class InboundImapService
             $mailboxes[] = [
                 'domain' => $staffMailbox->domain?->domain,
                 'domain_id' => (int) $staffMailbox->email_domain_id,
+                'staff_mailbox_id' => (int) $staffMailbox->id,
                 'username' => $username,
                 'password' => $password,
                 'host' => (string) ($imap['host'] ?? 'localhost'),
@@ -187,10 +190,13 @@ class InboundImapService
             'skipped' => 0,
             'errors' => 0,
             'unmatched' => 0,
+            'already_forwarded' => 0,
             'candidates' => 0,
             'inbox_total' => 0,
             'unseen_total' => 0,
         ];
+
+        $staffMailboxId = isset($config['staff_mailbox_id']) ? (int) $config['staff_mailbox_id'] : null;
 
         try {
             $stats['inbox_total'] = imap_num_msg($connection) ?: 0;
@@ -200,13 +206,25 @@ class InboundImapService
             $uids = $this->searchMessageUids($connection, $includeSeen, $days, $stats['inbox_total']);
             $stats['candidates'] = count($uids);
             foreach ($uids as $uid) {
+                $uid = (int) $uid;
                 $stats['processed']++;
                 try {
-                    $payload = $this->parseMessage($connection, (int) $uid, $config['username'] ?? null);
+                    $payload = $this->parseMessage($connection, $uid, $config['username'] ?? null);
                     if ($payload === null) {
                         $stats['skipped']++;
-                        // Mark seen so webmail does not re-poll forever; use --include-seen to reprocess.
                         imap_setflag_full($connection, (string) $uid, '\\Seen');
+                        continue;
+                    }
+
+                    $messageId = isset($payload['messageId']) ? trim((string) $payload['messageId']) : null;
+                    $mailboxEmail = strtolower(trim((string) ($config['username'] ?? '')));
+                    if ($mailboxEmail !== '' && strtolower($payload['from']) === $mailboxEmail) {
+                        $stats['skipped']++;
+                        continue;
+                    }
+
+                    if ($this->isAlreadyForwarded($staffMailboxId, $messageId, $uid)) {
+                        $stats['already_forwarded']++;
                         continue;
                     }
 
@@ -220,6 +238,7 @@ class InboundImapService
                     $result = $this->forwardToCrm($payload);
                     if ($result === 'forwarded') {
                         $stats['forwarded']++;
+                        $this->markForwarded($staffMailboxId, $uid, $messageId);
                         imap_setflag_full($connection, (string) $uid, '\\Seen');
                     } elseif ($result === 'unmatched') {
                         $stats['unmatched']++;
@@ -265,7 +284,57 @@ class InboundImapService
             $uids = imap_search($connection, 'ALL') ?: [];
         }
 
-        return array_values(array_unique(array_map('intval', $uids)));
+        $unseen = imap_search($connection, 'UNSEEN') ?: [];
+        $merged = array_values(array_unique(array_map('intval', array_merge($uids, $unseen))));
+
+        return $merged;
+    }
+
+    protected function isAlreadyForwarded(?int $staffMailboxId, ?string $messageId, int $uid): bool
+    {
+        if (!$staffMailboxId) {
+            return false;
+        }
+
+        if ($messageId !== null && $messageId !== '') {
+            $normalized = trim($messageId, '<>');
+            if (
+                StaffMailboxProcessedMessage::query()
+                    ->where('staff_mailbox_id', $staffMailboxId)
+                    ->where(function ($query) use ($normalized) {
+                        $query->where('message_id', $normalized)
+                            ->orWhere('message_id', '<' . $normalized . '>');
+                    })
+                    ->exists()
+            ) {
+                return true;
+            }
+        }
+
+        return StaffMailboxProcessedMessage::query()
+            ->where('staff_mailbox_id', $staffMailboxId)
+            ->where('message_uid', (string) $uid)
+            ->exists();
+    }
+
+    protected function markForwarded(?int $staffMailboxId, int $uid, ?string $messageId): void
+    {
+        if (!$staffMailboxId) {
+            return;
+        }
+
+        StaffMailboxProcessedMessage::query()->updateOrCreate(
+            [
+                'staff_mailbox_id' => $staffMailboxId,
+                'message_uid' => (string) $uid,
+            ],
+            [
+                'message_id' => $messageId !== null && $messageId !== '' ? trim($messageId, '<>') : null,
+                'processed_at' => now(),
+            ]
+        );
+
+        StaffMailbox::query()->whereKey($staffMailboxId)->update(['last_polled_at' => now()]);
     }
 
     /**

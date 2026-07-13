@@ -8,27 +8,28 @@ use Illuminate\Console\Command;
 class PollInboundMail extends Command
 {
     protected $signature = 'email:poll-inbound
-                            {--include-seen : Also process read messages from the lookback window}
-                            {--days=7 : Days to look back when --include-seen is set}';
+                            {--unread-only : Only process unread messages (skip read mail in INBOX)}
+                            {--days=30 : Days to look back when importing read messages}';
 
     protected $description = 'Poll IMAP inbox for deal email replies and forward to CRM';
 
     public function handle(InboundImapService $service): int
     {
-        $includeSeen = (bool) $this->option('include-seen');
+        $includeSeen = !$this->option('unread-only');
         $days = max(1, (int) $this->option('days'));
 
         try {
             $stats = $service->poll($includeSeen, $days);
             $this->info(sprintf(
-                'Inbound poll complete — mailboxes: %d, processed: %d, forwarded: %d, unmatched: %d, skipped: %d, errors: %d%s',
+                'Inbound poll complete — mailboxes: %d, processed: %d, forwarded: %d, already in CRM: %d, unmatched: %d, skipped: %d, errors: %d%s',
                 $stats['mailboxes'],
                 $stats['processed'],
                 $stats['forwarded'],
+                $stats['already_forwarded'] ?? 0,
                 $stats['unmatched'] ?? 0,
                 $stats['skipped'],
                 $stats['errors'],
-                $includeSeen ? sprintf(' (include-seen, last %d days)', $days) : ' (unread only)'
+                $includeSeen ? sprintf(' (last %d days + unread)', $days) : ' (unread only)'
             ));
 
             foreach ($stats['details'] as $detail) {
@@ -53,20 +54,21 @@ class PollInboundMail extends Command
                     );
                 } elseif ($includeSeen) {
                     $this->warn(
-                        'INBOX has messages but none matched the search window — try --days=30 or check storage/logs/laravel.log.'
+                        'INBOX has messages but none matched the search window — try --days=60 or check storage/logs/laravel.log.'
                     );
                 } else {
                     $this->warn(
-                        'No unread messages — if you opened the reply in webmail, re-run with --include-seen.'
+                        'No unread messages — re-run without --unread-only to import read mail from the last 30 days.'
                     );
                 }
             } elseif ($stats['forwarded'] === 0 && ($stats['unmatched'] ?? 0) > 0) {
                 $this->warn('CRM received replies but could not match them to a deal — check deal_emails.message_id / reply_token and storage/logs/laravel.log.');
             } elseif ($stats['forwarded'] === 0 && $stats['errors'] > 0) {
                 $this->warn('Messages were found but forwarding failed — check storage/logs/laravel.log for [imap] entries.');
+            } elseif ($stats['forwarded'] === 0 && ($stats['already_forwarded'] ?? 0) > 0) {
+                $this->line('All candidate messages were already imported to CRM.');
             } elseif ($stats['forwarded'] === 0 && $stats['skipped'] > 0) {
                 $this->warn('Messages were skipped (invalid From or empty body after MIME parse) — see storage/logs/laravel.log for [imap] Skipped message entries.');
-                $this->warn('If the reply was already opened in webmail, re-run: php artisan email:poll-inbound --include-seen');
             }
 
             return self::SUCCESS;
