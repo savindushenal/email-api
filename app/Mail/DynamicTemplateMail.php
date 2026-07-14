@@ -81,7 +81,10 @@ class DynamicTemplateMail extends Mailable
             $text['In-Reply-To'] = $inReplyTo;
         }
         if ($this->referencesHeader !== null && trim($this->referencesHeader) !== '') {
-            $text['References'] = trim($this->referencesHeader);
+            $formattedRefs = $this->formatReferencesHeader($this->referencesHeader);
+            if ($formattedRefs !== null) {
+                $text['References'] = $formattedRefs;
+            }
         }
 
         if ($this->messageIdHeader === null) {
@@ -101,6 +104,20 @@ class DynamicTemplateMail extends Mailable
         }
         $id = trim($messageId, " \t\n\r\0\x0B<>");
         return $id === '' ? null : sprintf('<%s>', $id);
+    }
+
+    protected function formatReferencesHeader(string $references): ?string
+    {
+        $raw = trim($references);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match_all('/<[^>]+>/', $raw, $matches) && $matches[0] !== []) {
+            return implode(' ', array_unique($matches[0]));
+        }
+
+        return $this->formatMessageIdHeader($raw);
     }
 
     public function content(): Content

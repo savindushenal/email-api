@@ -103,9 +103,7 @@ class EmailService
 
             $messageIdHeader = $this->generateMessageId($domain->domain);
             $inReplyTo = $this->formatThreadHeader($options->inReplyTo);
-            $references = $options->references !== null && trim($options->references) !== ''
-                ? trim($options->references)
-                : $inReplyTo;
+            $references = $this->formatReferencesHeader($options->references, $inReplyTo);
 
             $mailable = new DynamicTemplateMail(
                 $renderedHtml,
@@ -232,6 +230,26 @@ class EmailService
 
         $id = trim($messageId, " \t\n\r\0\x0B<>");
         return $id === '' ? null : sprintf('<%s>', $id);
+    }
+
+    /**
+     * Build a References header with angle-bracket Message-IDs (RFC 5322).
+     */
+    protected function formatReferencesHeader(?string $references, ?string $fallbackInReplyTo): ?string
+    {
+        $raw = $references !== null && trim($references) !== ''
+            ? trim($references)
+            : ($fallbackInReplyTo ?? '');
+
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match_all('/<[^>]+>/', $raw, $matches) && $matches[0] !== []) {
+            return implode(' ', array_unique($matches[0]));
+        }
+
+        return $this->formatThreadHeader($raw);
     }
 
     public function validateEmail(string $email): bool

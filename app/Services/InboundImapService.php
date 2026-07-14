@@ -212,7 +212,7 @@ class InboundImapService
                     $payload = $this->parseMessage($connection, $uid, $config['username'] ?? null);
                     if ($payload === null) {
                         $stats['skipped']++;
-                        imap_setflag_full($connection, (string) $uid, '\\Seen');
+                        imap_setflag_full($connection, (string) $uid, '\\Seen', ST_UID);
                         continue;
                     }
 
@@ -239,10 +239,10 @@ class InboundImapService
                     if ($result === 'forwarded') {
                         $stats['forwarded']++;
                         $this->markForwarded($staffMailboxId, $uid, $messageId);
-                        imap_setflag_full($connection, (string) $uid, '\\Seen');
+                        imap_setflag_full($connection, (string) $uid, '\\Seen', ST_UID);
                     } elseif ($result === 'unmatched') {
                         $stats['unmatched']++;
-                        imap_setflag_full($connection, (string) $uid, '\\Seen');
+                        imap_setflag_full($connection, (string) $uid, '\\Seen', ST_UID);
                     } else {
                         $stats['errors']++;
                     }
@@ -264,32 +264,39 @@ class InboundImapService
     }
 
     /**
-     * @return list<int>
+     * @return list<int> Stable IMAP UIDs (SE_UID) — never sequence numbers.
      */
     protected function searchMessageUids($connection, bool $includeSeen, int $days, int $inboxTotal = 0): array
     {
         if (!$includeSeen) {
-            return imap_search($connection, 'UNSEEN') ?: [];
+            return array_values(array_map('intval', imap_search($connection, 'UNSEEN', SE_UID) ?: []));
         }
 
         $since = date('d-M-Y', strtotime(sprintf('-%d days', max(1, $days))));
         $criteria = sprintf('SINCE "%s"', $since);
-        $uids = imap_search($connection, $criteria) ?: [];
+        $uids = imap_search($connection, $criteria, SE_UID) ?: [];
 
         if ($uids === [] && $inboxTotal > 0) {
             Log::warning('[imap] SINCE search returned no UIDs but INBOX has messages — falling back to ALL', [
                 'since' => $since,
                 'inbox_total' => $inboxTotal,
             ]);
-            $uids = imap_search($connection, 'ALL') ?: [];
+            $uids = imap_search($connection, 'ALL', SE_UID) ?: [];
         }
 
-        $unseen = imap_search($connection, 'UNSEEN') ?: [];
+        $unseen = imap_search($connection, 'UNSEEN', SE_UID) ?: [];
         $merged = array_values(array_unique(array_map('intval', array_merge($uids, $unseen))));
 
         return $merged;
     }
 
+    /**
+     * Deduplicate primarily by RFC Message-ID.
+     *
+     * Never treat "UID already seen" as imported when Message-ID is present but unknown —
+     * older builds stored IMAP sequence numbers in message_uid, which get reused after
+     * deletes/renumbers and falsely skip brand-new replies.
+     */
     protected function isAlreadyForwarded(?int $staffMailboxId, ?string $messageId, int $uid): bool
     {
         if (!$staffMailboxId) {
@@ -297,18 +304,13 @@ class InboundImapService
         }
 
         if ($messageId !== null && $messageId !== '') {
-            $normalized = trim($messageId, '<>');
-            if (
-                StaffMailboxProcessedMessage::query()
-                    ->where('staff_mailbox_id', $staffMailboxId)
-                    ->where(function ($query) use ($normalized) {
-                        $query->where('message_id', $normalized)
-                            ->orWhere('message_id', '<' . $normalized . '>');
-                    })
-                    ->exists()
-            ) {
-                return true;
-            }
+            $normalized = strtolower(trim($messageId, '<>'));
+            return StaffMailboxProcessedMessage::query()
+                ->where('staff_mailbox_id', $staffMailboxId)
+                ->where(function ($query) use ($normalized) {
+                    $query->whereRaw('LOWER(TRIM(BOTH \'<>\' FROM message_id)) = ?', [$normalized]);
+                })
+                ->exists();
         }
 
         return StaffMailboxProcessedMessage::query()
@@ -323,16 +325,49 @@ class InboundImapService
             return;
         }
 
-        StaffMailboxProcessedMessage::query()->updateOrCreate(
-            [
-                'staff_mailbox_id' => $staffMailboxId,
-                'message_uid' => (string) $uid,
-            ],
-            [
-                'message_id' => $messageId !== null && $messageId !== '' ? trim($messageId, '<>') : null,
-                'processed_at' => now(),
-            ]
-        );
+        $normalizedId = $messageId !== null && $messageId !== ''
+            ? trim($messageId, '<>')
+            : null;
+
+        if ($normalizedId !== null) {
+            $existingById = StaffMailboxProcessedMessage::query()
+                ->where('staff_mailbox_id', $staffMailboxId)
+                ->where(function ($query) use ($normalizedId) {
+                    $normalized = strtolower($normalizedId);
+                    $query->whereRaw('LOWER(TRIM(BOTH \'<>\' FROM message_id)) = ?', [$normalized]);
+                })
+                ->first();
+
+            if ($existingById) {
+                $existingById->update([
+                    'message_uid' => (string) $uid,
+                    'message_id' => $normalizedId,
+                    'processed_at' => now(),
+                ]);
+            } else {
+                StaffMailboxProcessedMessage::query()->updateOrCreate(
+                    [
+                        'staff_mailbox_id' => $staffMailboxId,
+                        'message_uid' => (string) $uid,
+                    ],
+                    [
+                        'message_id' => $normalizedId,
+                        'processed_at' => now(),
+                    ]
+                );
+            }
+        } else {
+            StaffMailboxProcessedMessage::query()->updateOrCreate(
+                [
+                    'staff_mailbox_id' => $staffMailboxId,
+                    'message_uid' => (string) $uid,
+                ],
+                [
+                    'message_id' => null,
+                    'processed_at' => now(),
+                ]
+            );
+        }
 
         StaffMailbox::query()->whereKey($staffMailboxId)->update(['last_polled_at' => now()]);
     }
@@ -460,7 +495,16 @@ class InboundImapService
      */
     protected function parseMessage($connection, int $uid, ?string $mailboxLabel = null): ?array
     {
-        $header = imap_headerinfo($connection, $uid);
+        $msgNo = imap_msgno($connection, $uid);
+        if (!$msgNo) {
+            Log::warning('[imap] Skipped message — UID has no sequence number', [
+                'mailbox' => $mailboxLabel,
+                'uid' => $uid,
+            ]);
+            return null;
+        }
+
+        $header = imap_headerinfo($connection, $msgNo);
         if (!$header) {
             Log::warning('[imap] Skipped message — no header', [
                 'mailbox' => $mailboxLabel,
@@ -469,7 +513,7 @@ class InboundImapService
             return null;
         }
 
-        $rawHeader = imap_fetchheader($connection, $uid) ?: '';
+        $rawHeader = imap_fetchheader($connection, $uid, FT_UID) ?: '';
         $from = $this->extractEmailAddress($header->from ?? null)
             ?: $this->extractEmailAddress($header->reply_to ?? null)
             ?: $this->extractEmailAddress($header->sender ?? null)
@@ -485,7 +529,7 @@ class InboundImapService
             return null;
         }
 
-        $structure = imap_fetchstructure($connection, $uid);
+        $structure = imap_fetchstructure($connection, $uid, FT_UID);
         $body = $this->extractBody($connection, $uid, $structure);
         if (trim($body) === '') {
             Log::warning('[imap] Skipped message — empty body after MIME parse', [
@@ -497,7 +541,21 @@ class InboundImapService
             return null;
         }
 
-        $messageId = isset($header->message_id) ? trim($header->message_id, '<>') : null;
+        $messageId = null;
+        if (!empty($header->message_id)) {
+            $messageId = trim((string) $header->message_id, '<>');
+        }
+        if ($messageId === null || $messageId === '') {
+            $rawMessageId = $this->extractHeaderValue($rawHeader, 'Message-ID')
+                ?? $this->extractHeaderValue($rawHeader, 'Message-Id');
+            if ($rawMessageId !== null && $rawMessageId !== '') {
+                $messageId = trim($rawMessageId, '<>');
+            }
+        }
+        if ($messageId === '') {
+            $messageId = null;
+        }
+
         $inReplyTo = $this->extractHeaderValue($rawHeader, 'In-Reply-To');
         $references = $this->extractHeaderValue($rawHeader, 'References');
         $deliveredTo = $this->extractHeaderValue($rawHeader, 'Delivered-To');
@@ -607,12 +665,12 @@ class InboundImapService
     protected function extractBody($connection, int $uid, $structure): string
     {
         if (!$structure) {
-            $raw = imap_body($connection, $uid) ?: '';
+            $raw = imap_body($connection, $uid, FT_UID) ?: '';
             return $this->normalizeBodyText($this->decodePart($raw, 0));
         }
 
         if (!isset($structure->parts)) {
-            $raw = imap_body($connection, $uid) ?: '';
+            $raw = imap_body($connection, $uid, FT_UID) ?: '';
             return $this->normalizeBodyText(
                 $this->convertCharset($this->decodePart($raw, $structure->encoding ?? 0), $structure)
             );
@@ -624,7 +682,7 @@ class InboundImapService
             return $this->normalizeBodyText($text);
         }
 
-        $raw = imap_body($connection, $uid) ?: '';
+        $raw = imap_body($connection, $uid, FT_UID) ?: '';
         return $this->normalizeBodyText(
             $this->convertCharset($this->decodePart($raw, $structure->encoding ?? 0), $structure)
         );
@@ -649,8 +707,8 @@ class InboundImapService
             }
 
             $raw = $prefix === ''
-                ? (imap_body($connection, $uid) ?: '')
-                : (imap_fetchbody($connection, $uid, $prefix) ?: '');
+                ? (imap_body($connection, $uid, FT_UID) ?: '')
+                : (imap_fetchbody($connection, $uid, $prefix, FT_UID) ?: '');
             $decoded = $this->convertCharset(
                 $this->decodePart($raw, $structure->encoding ?? 0),
                 $structure
