@@ -233,3 +233,21 @@ INBOUND_CRM_WEBHOOK_SECRET=<same as EMAIL_API_INBOUND_SECRET>
 ```cron
 */3 * * * * cd /path/to/email-api && php artisan email:poll-inbound >> /dev/null 2>&1
 ```
+
+The poller opens **INBOX plus Junk/Spam** (auto-detected folder names like `Junk`, `Spam`, `Bulk`). Trash/Deleted is not polled. Dedup is by Message-ID so the same reply is not imported twice if it later moves to INBOX.
+
+### Keep replies out of Junk (cPanel filter)
+
+Do this once per staff outreach mailbox (e.g. `savindu@email.absterco.com`):
+
+1. cPanel → **Email Accounts** → **Manage** the staff mailbox → **Create Filter** (or **Email Filters**).
+2. Add a filter, for example:
+   - **Rules:** Subject starts with `Re:`  
+     **OR** To contains the staff address  
+   - **Actions:** Deliver to Inbox **and** (if available) **Do not spam** / skip spam filter
+3. Optional: Email Accounts → Spam Filters / SpamAssassin → whitelist known prospect domains, or lower the spam threshold for that account.
+4. Move any existing deal replies from Junk → Inbox once, then run:
+
+```bash
+php artisan email:poll-inbound --force --days=60 --verbose-messages
+```

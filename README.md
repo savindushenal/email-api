@@ -699,6 +699,8 @@ email-api/
 
 Polls **staff outreach mailboxes** on `email.absterco.com` (`staff_mailboxes` table) plus any domain with `mail_config.inbound.enabled`. Forwards matched deal replies to the CRM webhook. Ticket, invoice, and OTP mail on `crm.absterco.com` should leave `inbound.enabled` false.
 
+Each poll opens the primary folder (**INBOX**) and any auto-detected **Junk/Spam** folders. Dedup is by Message-ID. Also add a cPanel filter so `Re:` replies prefer Inbox (see `ABSTERCO_CRM_EMAIL_SETUP.md` §11).
+
 ### Requirements
 
 - PHP **IMAP extension** enabled (`php-imap`)

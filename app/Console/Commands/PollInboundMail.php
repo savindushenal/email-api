@@ -8,12 +8,12 @@ use Illuminate\Console\Command;
 class PollInboundMail extends Command
 {
     protected $signature = 'email:poll-inbound
-                            {--unread-only : Only process unread messages (skip read mail in INBOX)}
+                            {--unread-only : Only process unread messages (skip read mail in INBOX/Junk)}
                             {--days=30 : Days to look back when importing read messages}
                             {--force : Re-forward to CRM even if Message-ID was already marked processed}
                             {--verbose-messages : Print each candidate From/Subject/Message-ID/status}';
 
-    protected $description = 'Poll IMAP inbox for deal email replies and forward to CRM';
+    protected $description = 'Poll IMAP inbox (+ Junk/Spam) for deal email replies and forward to CRM';
 
     public function handle(InboundImapService $service): int
     {
@@ -39,21 +39,30 @@ class PollInboundMail extends Command
 
             foreach ($stats['details'] as $detail) {
                 $domain = $detail['domain'] ? " ({$detail['domain']})" : '';
+                $folders = $detail['folders'] ?? [$detail['folder'] ?? 'INBOX'];
                 $this->line(sprintf(
-                    '  %s%s — %d candidate message(s), INBOX total: %d, unread: %d',
+                    '  %s%s — %d candidate message(s), folders: %s',
                     $detail['mailbox'],
                     $domain,
                     $detail['candidates'],
-                    $detail['inbox_total'] ?? 0,
-                    $detail['unseen_total'] ?? 0
+                    implode(', ', $folders)
                 ));
+                foreach ($detail['folder_totals'] ?? [] as $folderName => $totals) {
+                    $this->line(sprintf(
+                        '    %s — total: %d, unread: %d',
+                        $folderName,
+                        $totals['total'] ?? 0,
+                        $totals['unseen'] ?? 0
+                    ));
+                }
             }
 
             if ($this->option('verbose-messages') || $force) {
                 foreach ($stats['messages'] ?? [] as $msg) {
                     $this->line(sprintf(
-                        '    [%s] %s | %s | mid=%s | irt=%s',
+                        '    [%s] [%s] %s | %s | mid=%s | irt=%s',
                         $msg['status'] ?? '?',
+                        $msg['folder'] ?? 'INBOX',
                         $msg['from'] ?? '?',
                         $msg['subject'] ?? '(no subject)',
                         $msg['messageId'] ?? '(none)',
@@ -63,16 +72,20 @@ class PollInboundMail extends Command
             }
 
             if ($stats['processed'] === 0) {
-                $inboxEmpty = collect($stats['details'])->every(
-                    fn (array $detail) => ($detail['inbox_total'] ?? 0) === 0
-                );
-                if ($inboxEmpty) {
+                $allEmpty = collect($stats['details'])->every(function (array $detail) {
+                    $folderTotals = $detail['folder_totals'] ?? [];
+                    if ($folderTotals === []) {
+                        return ($detail['inbox_total'] ?? 0) === 0;
+                    }
+                    return collect($folderTotals)->every(fn (array $t) => ($t['total'] ?? 0) === 0);
+                });
+                if ($allEmpty) {
                     $this->warn(
-                        'INBOX is empty — the reply has not been delivered to the staff mailbox yet. Run php artisan email:diagnose-inbound for folder details.'
+                        'INBOX and Junk/Spam are empty — the reply has not been delivered to the staff mailbox yet. Run php artisan email:diagnose-inbound for folder details.'
                     );
                 } elseif ($includeSeen) {
                     $this->warn(
-                        'INBOX has messages but none matched the search window — try --days=60 or check storage/logs/laravel.log.'
+                        'Folders have messages but none matched the search window — try --days=60 or check storage/logs/laravel.log.'
                     );
                 } else {
                     $this->warn(

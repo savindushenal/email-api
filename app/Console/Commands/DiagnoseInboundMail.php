@@ -46,8 +46,11 @@ class DiagnoseInboundMail extends Command
             ));
 
             if (($report['inbox_total'] ?? 0) === 0) {
-                $this->warn('  INBOX is empty — the prospect reply has not arrived at this mailbox.');
-                $this->line('  Check: cPanel webmail, MX for email.absterco.com, spam folder, and that deal emails use Reply-To = staff mailbox (e.g. savindu@email.absterco.com).');
+                $this->warn('  INBOX is empty — check Junk/Spam below, MX for email.absterco.com, and that deal emails use Reply-To = staff mailbox.');
+            }
+
+            if (!empty($report['poll_folders'])) {
+                $this->line('  Poll folders: ' . implode(', ', $report['poll_folders']));
             }
 
             if (!empty($report['recent_messages'])) {
@@ -64,7 +67,7 @@ class DiagnoseInboundMail extends Command
             }
 
             if (!empty($report['spam_recent'])) {
-                $this->warn('  Recent messages in Spam/Junk/Trash (not polled by default):');
+                $this->warn('  Recent Junk/Spam messages (also polled by email:poll-inbound):');
                 foreach ($report['spam_recent'] as $msg) {
                     $this->line(sprintf(
                         '    - [%s] %s | %s | %s',

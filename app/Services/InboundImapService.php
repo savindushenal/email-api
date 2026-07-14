@@ -63,6 +63,8 @@ class InboundImapService
                     'inbox_total' => $mailboxStats['inbox_total'],
                     'unseen_total' => $mailboxStats['unseen_total'],
                     'folder' => $config['folder'] ?? 'INBOX',
+                    'folders' => $mailboxStats['folders'] ?? [$config['folder'] ?? 'INBOX'],
+                    'folder_totals' => $mailboxStats['folder_totals'] ?? [],
                     'host' => $config['host'] ?? null,
                 ];
                 foreach ($mailboxStats['messages'] ?? [] as $msg) {
@@ -177,17 +179,155 @@ class InboundImapService
     }
 
     /**
+     * Poll the primary folder (usually INBOX) plus Junk/Spam so replies misplaced by the host filter still ingest.
+     *
      * @param array{username: string, password: string, host: string, port: int, encryption: string, folder: string} $config
-     * @return array{processed: int, forwarded: int, duplicates: int, skipped: int, errors: int, unmatched: int, already_forwarded: int, candidates: int, inbox_total: int, unseen_total: int, messages: list<array<string, mixed>>}
+     * @return array{processed: int, forwarded: int, duplicates: int, skipped: int, errors: int, unmatched: int, already_forwarded: int, candidates: int, inbox_total: int, unseen_total: int, folders: list<string>, folder_totals: array<string, array{total: int, unseen: int}>, messages: list<array<string, mixed>>}
      */
     protected function pollMailbox(array $config, bool $includeSeen = false, int $days = 7, bool $force = false): array
     {
-        $mailbox = $this->buildMailboxString($config);
-        $connection = @imap_open($mailbox, $config['username'], $config['password']);
-        if ($connection === false) {
+        $primaryFolder = (string) ($config['folder'] ?? 'INBOX');
+        $probeConfig = array_merge($config, ['folder' => $primaryFolder]);
+        $probeMailbox = $this->buildMailboxString($probeConfig);
+        $probe = @imap_open($probeMailbox, $config['username'], $config['password']);
+        if ($probe === false) {
             throw new \RuntimeException(
                 sprintf('IMAP connect failed for %s: %s', $config['username'], imap_last_error())
             );
+        }
+
+        try {
+            $folders = $this->resolvePollFolders($probe, $config, $primaryFolder);
+        } finally {
+            imap_close($probe);
+        }
+
+        $stats = [
+            'processed' => 0,
+            'forwarded' => 0,
+            'duplicates' => 0,
+            'skipped' => 0,
+            'errors' => 0,
+            'unmatched' => 0,
+            'already_forwarded' => 0,
+            'candidates' => 0,
+            'inbox_total' => 0,
+            'unseen_total' => 0,
+            'folders' => $folders,
+            'folder_totals' => [],
+            'messages' => [],
+        ];
+
+        $staffMailboxId = isset($config['staff_mailbox_id']) ? (int) $config['staff_mailbox_id'] : null;
+
+        foreach ($folders as $folder) {
+            $folderStats = $this->pollFolder(
+                array_merge($config, ['folder' => $folder]),
+                $primaryFolder,
+                $staffMailboxId,
+                $includeSeen,
+                $days,
+                $force
+            );
+
+            foreach (['processed', 'forwarded', 'duplicates', 'skipped', 'errors', 'unmatched', 'already_forwarded', 'candidates'] as $key) {
+                $stats[$key] += $folderStats[$key] ?? 0;
+            }
+
+            $stats['folder_totals'][$folder] = [
+                'total' => $folderStats['inbox_total'] ?? 0,
+                'unseen' => $folderStats['unseen_total'] ?? 0,
+            ];
+
+            if (strcasecmp($folder, $primaryFolder) === 0) {
+                $stats['inbox_total'] = $folderStats['inbox_total'] ?? 0;
+                $stats['unseen_total'] = $folderStats['unseen_total'] ?? 0;
+            }
+
+            foreach ($folderStats['messages'] ?? [] as $msg) {
+                $stats['messages'][] = $msg;
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @param resource $connection
+     * @param array{username: string, password: string, host: string, port: int, encryption: string, folder: string} $config
+     * @return list<string>
+     */
+    protected function resolvePollFolders($connection, array $config, string $primaryFolder): array
+    {
+        $folders = [$primaryFolder];
+        $rootMailbox = $this->buildMailboxRoot($config);
+        $listed = @imap_list($connection, $rootMailbox, '*') ?: [];
+
+        foreach ($listed as $folderPath) {
+            $name = $this->folderNameFromPath((string) $folderPath);
+            if ($name === '' || !$this->isJunkFolder($name)) {
+                continue;
+            }
+            if ($this->folderNamesMatch($name, $primaryFolder)) {
+                continue;
+            }
+            $folders[] = $name;
+        }
+
+        $unique = [];
+        foreach ($folders as $folder) {
+            $key = strtolower($this->normalizeFolderName($folder));
+            if (!isset($unique[$key])) {
+                $unique[$key] = $folder;
+            }
+        }
+
+        $resolved = array_values($unique);
+        if (count($resolved) > 1) {
+            Log::info('[imap] Polling primary folder plus Junk/Spam', [
+                'mailbox' => $config['username'] ?? null,
+                'folders' => $resolved,
+            ]);
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * @param array{username: string, password: string, host: string, port: int, encryption: string, folder: string} $config
+     * @return array{processed: int, forwarded: int, duplicates: int, skipped: int, errors: int, unmatched: int, already_forwarded: int, candidates: int, inbox_total: int, unseen_total: int, messages: list<array<string, mixed>>}
+     */
+    protected function pollFolder(
+        array $config,
+        string $primaryFolder,
+        ?int $staffMailboxId,
+        bool $includeSeen,
+        int $days,
+        bool $force
+    ): array {
+        $folder = (string) ($config['folder'] ?? 'INBOX');
+        $mailbox = $this->buildMailboxString($config);
+        $connection = @imap_open($mailbox, $config['username'], $config['password']);
+        if ($connection === false) {
+            Log::warning('[imap] Folder open failed — skipping', [
+                'mailbox' => $config['username'] ?? null,
+                'folder' => $folder,
+                'error' => imap_last_error() ?: 'unknown',
+            ]);
+
+            return [
+                'processed' => 0,
+                'forwarded' => 0,
+                'duplicates' => 0,
+                'skipped' => 0,
+                'errors' => 1,
+                'unmatched' => 0,
+                'already_forwarded' => 0,
+                'candidates' => 0,
+                'inbox_total' => 0,
+                'unseen_total' => 0,
+                'messages' => [],
+            ];
         }
 
         $stats = [
@@ -204,8 +344,6 @@ class InboundImapService
             'messages' => [],
         ];
 
-        $staffMailboxId = isset($config['staff_mailbox_id']) ? (int) $config['staff_mailbox_id'] : null;
-
         try {
             $stats['inbox_total'] = imap_num_msg($connection) ?: 0;
             $status = imap_status($connection, $mailbox, SA_UNSEEN);
@@ -216,6 +354,7 @@ class InboundImapService
             foreach ($uids as $uid) {
                 $uid = (int) $uid;
                 $stats['processed']++;
+                $processedUidKey = $this->processedUidKey($folder, $primaryFolder, $uid);
                 try {
                     $payload = $this->parseMessage($connection, $uid, $config['username'] ?? null);
                     if ($payload === null) {
@@ -228,6 +367,7 @@ class InboundImapService
                     $mailboxEmail = strtolower(trim((string) ($config['username'] ?? '')));
                     $msgSummary = [
                         'mailbox' => $config['username'],
+                        'folder' => $folder,
                         'uid' => $uid,
                         'from' => $payload['from'] ?? null,
                         'subject' => $payload['subject'] ?? null,
@@ -242,7 +382,7 @@ class InboundImapService
                         continue;
                     }
 
-                    if (!$force && $this->isAlreadyForwarded($staffMailboxId, $messageId, $uid)) {
+                    if (!$force && $this->isAlreadyForwarded($staffMailboxId, $messageId, $processedUidKey)) {
                         $stats['already_forwarded']++;
                         $msgSummary['status'] = 'already_forwarded';
                         $stats['messages'][] = $msgSummary;
@@ -266,7 +406,7 @@ class InboundImapService
                         } else {
                             $stats['duplicates']++;
                         }
-                        $this->markForwarded($staffMailboxId, $uid, $messageId);
+                        $this->markForwarded($staffMailboxId, $processedUidKey, $messageId);
                         imap_setflag_full($connection, (string) $uid, '\\Seen', ST_UID);
                     } elseif ($result === 'unmatched') {
                         $stats['unmatched']++;
@@ -279,6 +419,7 @@ class InboundImapService
                     Log::error('[imap] Message parse/forward failed', [
                         'domain' => $config['domain'] ?? null,
                         'mailbox' => $config['username'],
+                        'folder' => $folder,
                         'uid' => $uid,
                         'error' => $e->getMessage(),
                     ]);
@@ -289,6 +430,48 @@ class InboundImapService
         }
 
         return $stats;
+    }
+
+    protected function isJunkFolder(string $folder): bool
+    {
+        $name = $this->normalizeFolderName($folder);
+        if (preg_match('/(^|[.\/])(trash|deleted|bin|drafts?|sent)($|[.\/])/i', $name)) {
+            return false;
+        }
+
+        return (bool) preg_match('/(^|[.\/])(spam|junk|bulk|junk.?e-?mail)($|[.\/])/i', $name)
+            || (bool) preg_match('/(spam|junk|bulk)/i', $name);
+    }
+
+    protected function normalizeFolderName(string $folder): string
+    {
+        return trim(str_replace('\\', '/', $folder), '/');
+    }
+
+    protected function folderNamesMatch(string $a, string $b): bool
+    {
+        return strcasecmp($this->normalizeFolderName($a), $this->normalizeFolderName($b)) === 0;
+    }
+
+    protected function folderNameFromPath(string $folderPath): string
+    {
+        if (preg_match('/^\{[^}]+\}(.*)$/', $folderPath, $m)) {
+            return (string) $m[1];
+        }
+
+        return $folderPath;
+    }
+
+    /**
+     * IMAP UIDs are per-folder — namespace non-primary folders so dedupe keys never collide with INBOX.
+     */
+    protected function processedUidKey(string $folder, string $primaryFolder, int $uid): string
+    {
+        if ($this->folderNamesMatch($folder, $primaryFolder)) {
+            return (string) $uid;
+        }
+
+        return $this->normalizeFolderName($folder) . ':' . $uid;
     }
 
     /**
@@ -305,9 +488,9 @@ class InboundImapService
         $uids = imap_search($connection, $criteria, SE_UID) ?: [];
 
         if ($uids === [] && $inboxTotal > 0) {
-            Log::warning('[imap] SINCE search returned no UIDs but INBOX has messages — falling back to ALL', [
+            Log::warning('[imap] SINCE search returned no UIDs but folder has messages — falling back to ALL', [
                 'since' => $since,
-                'inbox_total' => $inboxTotal,
+                'folder_total' => $inboxTotal,
             ]);
             $uids = imap_search($connection, 'ALL', SE_UID) ?: [];
         }
@@ -324,8 +507,10 @@ class InboundImapService
      * Never treat "UID already seen" as imported when Message-ID is present but unknown —
      * older builds stored IMAP sequence numbers in message_uid, which get reused after
      * deletes/renumbers and falsely skip brand-new replies.
+     *
+     * @param string|int $uidKey Per-folder UID key (non-INBOX folders use "Folder:uid").
      */
-    protected function isAlreadyForwarded(?int $staffMailboxId, ?string $messageId, int $uid): bool
+    protected function isAlreadyForwarded(?int $staffMailboxId, ?string $messageId, string|int $uidKey): bool
     {
         if (!$staffMailboxId) {
             return false;
@@ -343,16 +528,20 @@ class InboundImapService
 
         return StaffMailboxProcessedMessage::query()
             ->where('staff_mailbox_id', $staffMailboxId)
-            ->where('message_uid', (string) $uid)
+            ->where('message_uid', (string) $uidKey)
             ->exists();
     }
 
-    protected function markForwarded(?int $staffMailboxId, int $uid, ?string $messageId): void
+    /**
+     * @param string|int $uidKey Per-folder UID key (non-INBOX folders use "Folder:uid").
+     */
+    protected function markForwarded(?int $staffMailboxId, string|int $uidKey, ?string $messageId): void
     {
         if (!$staffMailboxId) {
             return;
         }
 
+        $uid = (string) $uidKey;
         $normalizedId = $messageId !== null && $messageId !== ''
             ? trim($messageId, '<>')
             : null;
@@ -368,7 +557,7 @@ class InboundImapService
 
             if ($existingById) {
                 $existingById->update([
-                    'message_uid' => (string) $uid,
+                    'message_uid' => $uid,
                     'message_id' => $normalizedId,
                     'processed_at' => now(),
                 ]);
@@ -376,7 +565,7 @@ class InboundImapService
                 StaffMailboxProcessedMessage::query()->updateOrCreate(
                     [
                         'staff_mailbox_id' => $staffMailboxId,
-                        'message_uid' => (string) $uid,
+                        'message_uid' => $uid,
                     ],
                     [
                         'message_id' => $normalizedId,
@@ -388,7 +577,7 @@ class InboundImapService
             StaffMailboxProcessedMessage::query()->updateOrCreate(
                 [
                     'staff_mailbox_id' => $staffMailboxId,
-                    'message_uid' => (string) $uid,
+                    'message_uid' => $uid,
                 ],
                 [
                     'message_id' => null,
@@ -472,21 +661,16 @@ class InboundImapService
 
             $folders = [];
             $spamHints = [];
-            $rootMailbox = sprintf(
-                '{%s:%d%s}',
-                $config['host'],
-                $config['port'],
-                $config['encryption'] === 'ssl' ? '/ssl' : ($config['encryption'] === 'tls' ? '/tls' : '')
-            );
+            $pollFolders = $this->resolvePollFolders($connection, $config, (string) ($config['folder'] ?? 'INBOX'));
+            $rootMailbox = $this->buildMailboxRoot($config);
             $folderList = @imap_list($connection, $rootMailbox, '*') ?: [];
             foreach ($folderList as $folderPath) {
-                $name = str_replace($rootMailbox, '', $folderPath);
+                $name = $this->folderNameFromPath((string) $folderPath);
                 $count = 0;
                 $folderConn = @imap_open($folderPath, $config['username'], $config['password']);
                 if ($folderConn !== false) {
                     $count = imap_num_msg($folderConn) ?: 0;
-                    $isSpamLike = (bool) preg_match('/spam|junk|bulk|trash|deleted/i', $name);
-                    if ($isSpamLike && $count > 0) {
+                    if ($this->isJunkFolder($name) && $count > 0) {
                         $start = max(1, $count - 4);
                         for ($msgNo = $start; $msgNo <= $count; $msgNo++) {
                             $header = imap_headerinfo($folderConn, $msgNo);
@@ -518,6 +702,7 @@ class InboundImapService
                 'connected' => true,
                 'host' => $config['host'],
                 'folder' => $config['folder'] ?? 'INBOX',
+                'poll_folders' => $pollFolders,
                 'inbox_total' => $total,
                 'unseen_total' => $status ? (int) ($status->unseen ?? 0) : 0,
                 'recent_messages' => $recent,
@@ -530,18 +715,26 @@ class InboundImapService
     }
 
     /**
+     * @param array{host: string, port: int, encryption: string, folder?: string} $config
+     */
+    protected function buildMailboxRoot(array $config): string
+    {
+        $flags = '/imap';
+        if (($config['encryption'] ?? '') === 'ssl') {
+            $flags .= '/ssl';
+        } elseif (($config['encryption'] ?? '') === 'tls') {
+            $flags .= '/tls';
+        }
+
+        return sprintf('{%s:%d%s}', $config['host'], $config['port'], $flags);
+    }
+
+    /**
      * @param array{host: string, port: int, encryption: string, folder: string} $config
      */
     protected function buildMailboxString(array $config): string
     {
-        $flags = '/imap';
-        if ($config['encryption'] === 'ssl') {
-            $flags .= '/ssl';
-        } elseif ($config['encryption'] === 'tls') {
-            $flags .= '/tls';
-        }
-
-        return sprintf('{%s:%d%s}%s', $config['host'], $config['port'], $flags, $config['folder']);
+        return $this->buildMailboxRoot($config) . $config['folder'];
     }
 
     /**
