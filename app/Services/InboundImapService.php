@@ -20,9 +20,10 @@ class InboundImapService
      *
      * @param bool $includeSeen When true, also process read messages from the last $days days (CRM dedupes by messageId).
      * @param int $days Lookback window when $includeSeen is true.
-     * @return array{processed: int, forwarded: int, skipped: int, errors: int, mailboxes: int, details: list<array{mailbox: string, domain: ?string, candidates: int}>}
+     * @param bool $force When true, re-forward even if Message-ID is already in staff_mailbox_processed_messages.
+     * @return array{processed: int, forwarded: int, duplicates: int, skipped: int, errors: int, unmatched: int, already_forwarded: int, mailboxes: int, details: list<array<string, mixed>>, messages: list<array<string, mixed>>}
      */
-    public function poll(bool $includeSeen = false, int $days = 7): array
+    public function poll(bool $includeSeen = false, int $days = 7, bool $force = false): array
     {
         if (!extension_loaded('imap')) {
             throw new \RuntimeException('PHP IMAP extension is not installed');
@@ -38,19 +39,21 @@ class InboundImapService
         $stats = [
             'processed' => 0,
             'forwarded' => 0,
+            'duplicates' => 0,
             'skipped' => 0,
             'errors' => 0,
             'unmatched' => 0,
             'already_forwarded' => 0,
             'mailboxes' => count($mailboxes),
             'details' => [],
+            'messages' => [],
         ];
 
         foreach ($mailboxes as $config) {
             $label = $config['username'];
             try {
-                $mailboxStats = $this->pollMailbox($config, $includeSeen, $days);
-                foreach (['processed', 'forwarded', 'skipped', 'errors', 'unmatched', 'already_forwarded'] as $key) {
+                $mailboxStats = $this->pollMailbox($config, $includeSeen, $days, $force);
+                foreach (['processed', 'forwarded', 'duplicates', 'skipped', 'errors', 'unmatched', 'already_forwarded'] as $key) {
                     $stats[$key] += $mailboxStats[$key] ?? 0;
                 }
                 $stats['details'][] = [
@@ -62,6 +65,9 @@ class InboundImapService
                     'folder' => $config['folder'] ?? 'INBOX',
                     'host' => $config['host'] ?? null,
                 ];
+                foreach ($mailboxStats['messages'] ?? [] as $msg) {
+                    $stats['messages'][] = $msg;
+                }
             } catch (\Throwable $e) {
                 $stats['errors']++;
                 Log::error('[imap] Mailbox poll failed', [
@@ -172,9 +178,9 @@ class InboundImapService
 
     /**
      * @param array{username: string, password: string, host: string, port: int, encryption: string, folder: string} $config
-     * @return array{processed: int, forwarded: int, skipped: int, errors: int, unmatched: int, candidates: int, inbox_total: int, unseen_total: int}
+     * @return array{processed: int, forwarded: int, duplicates: int, skipped: int, errors: int, unmatched: int, already_forwarded: int, candidates: int, inbox_total: int, unseen_total: int, messages: list<array<string, mixed>>}
      */
-    protected function pollMailbox(array $config, bool $includeSeen = false, int $days = 7): array
+    protected function pollMailbox(array $config, bool $includeSeen = false, int $days = 7, bool $force = false): array
     {
         $mailbox = $this->buildMailboxString($config);
         $connection = @imap_open($mailbox, $config['username'], $config['password']);
@@ -187,6 +193,7 @@ class InboundImapService
         $stats = [
             'processed' => 0,
             'forwarded' => 0,
+            'duplicates' => 0,
             'skipped' => 0,
             'errors' => 0,
             'unmatched' => 0,
@@ -194,6 +201,7 @@ class InboundImapService
             'candidates' => 0,
             'inbox_total' => 0,
             'unseen_total' => 0,
+            'messages' => [],
         ];
 
         $staffMailboxId = isset($config['staff_mailbox_id']) ? (int) $config['staff_mailbox_id'] : null;
@@ -218,13 +226,26 @@ class InboundImapService
 
                     $messageId = isset($payload['messageId']) ? trim((string) $payload['messageId']) : null;
                     $mailboxEmail = strtolower(trim((string) ($config['username'] ?? '')));
+                    $msgSummary = [
+                        'mailbox' => $config['username'],
+                        'uid' => $uid,
+                        'from' => $payload['from'] ?? null,
+                        'subject' => $payload['subject'] ?? null,
+                        'messageId' => $messageId,
+                        'inReplyTo' => $payload['inReplyTo'] ?? null,
+                    ];
+
                     if ($mailboxEmail !== '' && strtolower($payload['from']) === $mailboxEmail) {
                         $stats['skipped']++;
+                        $msgSummary['status'] = 'skipped_own';
+                        $stats['messages'][] = $msgSummary;
                         continue;
                     }
 
-                    if ($this->isAlreadyForwarded($staffMailboxId, $messageId, $uid)) {
+                    if (!$force && $this->isAlreadyForwarded($staffMailboxId, $messageId, $uid)) {
                         $stats['already_forwarded']++;
+                        $msgSummary['status'] = 'already_forwarded';
+                        $stats['messages'][] = $msgSummary;
                         continue;
                     }
 
@@ -236,8 +257,15 @@ class InboundImapService
                     }
 
                     $result = $this->forwardToCrm($payload);
-                    if ($result === 'forwarded') {
-                        $stats['forwarded']++;
+                    $msgSummary['status'] = $result;
+                    $stats['messages'][] = $msgSummary;
+
+                    if ($result === 'forwarded' || $result === 'duplicate') {
+                        if ($result === 'forwarded') {
+                            $stats['forwarded']++;
+                        } else {
+                            $stats['duplicates']++;
+                        }
                         $this->markForwarded($staffMailboxId, $uid, $messageId);
                         imap_setflag_full($connection, (string) $uid, '\\Seen', ST_UID);
                     } elseif ($result === 'unmatched') {
@@ -789,7 +817,7 @@ class InboundImapService
 
     /**
      * @param array<string, mixed> $payload
-     * @return 'forwarded'|'unmatched'|'error'
+     * @return 'forwarded'|'duplicate'|'unmatched'|'error'
      */
     protected function forwardToCrm(array $payload): string
     {
@@ -835,6 +863,12 @@ class InboundImapService
                 'body' => (string) $response->getBody(),
             ]);
             return 'error';
+        }
+
+        $body = (string) $response->getBody();
+        $json = json_decode($body, true);
+        if (is_array($json) && !empty($json['duplicate'])) {
+            return 'duplicate';
         }
 
         return 'forwarded';
