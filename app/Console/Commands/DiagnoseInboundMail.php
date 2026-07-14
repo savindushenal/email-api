@@ -51,10 +51,24 @@ class DiagnoseInboundMail extends Command
             }
 
             if (!empty($report['recent_messages'])) {
-                $this->line('  Recent messages:');
+                $this->line('  Recent INBOX messages:');
                 foreach ($report['recent_messages'] as $msg) {
                     $this->line(sprintf(
-                        '    - %s | %s | %s',
+                        '    - %s | %s | %s | mid=%s',
+                        $msg['date'] ?? 'no date',
+                        $msg['from'] ?? 'unknown',
+                        $msg['subject'] ?? '(no subject)',
+                        $msg['messageId'] ?? '(none)'
+                    ));
+                }
+            }
+
+            if (!empty($report['spam_recent'])) {
+                $this->warn('  Recent messages in Spam/Junk/Trash (not polled by default):');
+                foreach ($report['spam_recent'] as $msg) {
+                    $this->line(sprintf(
+                        '    - [%s] %s | %s | %s',
+                        $msg['folder'] ?? '?',
                         $msg['date'] ?? 'no date',
                         $msg['from'] ?? 'unknown',
                         $msg['subject'] ?? '(no subject)'

@@ -448,7 +448,7 @@ class InboundImapService
             $total = imap_num_msg($connection) ?: 0;
             $recent = [];
             if ($total > 0) {
-                $start = max(1, $total - 4);
+                $start = max(1, $total - 9);
                 for ($msgNo = $start; $msgNo <= $total; $msgNo++) {
                     $header = imap_headerinfo($connection, $msgNo);
                     if (!$header) {
@@ -458,15 +458,20 @@ class InboundImapService
                     if (!empty($header->from[0])) {
                         $from = ($header->from[0]->mailbox ?? '') . '@' . ($header->from[0]->host ?? '');
                     }
+                    $messageId = !empty($header->message_id)
+                        ? trim((string) $header->message_id, '<>')
+                        : null;
                     $recent[] = [
                         'from' => $from,
                         'subject' => isset($header->subject) ? imap_utf8((string) $header->subject) : null,
                         'date' => $header->date ?? null,
+                        'messageId' => $messageId,
                     ];
                 }
             }
 
             $folders = [];
+            $spamHints = [];
             $rootMailbox = sprintf(
                 '{%s:%d%s}',
                 $config['host'],
@@ -480,6 +485,26 @@ class InboundImapService
                 $folderConn = @imap_open($folderPath, $config['username'], $config['password']);
                 if ($folderConn !== false) {
                     $count = imap_num_msg($folderConn) ?: 0;
+                    $isSpamLike = (bool) preg_match('/spam|junk|bulk|trash|deleted/i', $name);
+                    if ($isSpamLike && $count > 0) {
+                        $start = max(1, $count - 4);
+                        for ($msgNo = $start; $msgNo <= $count; $msgNo++) {
+                            $header = imap_headerinfo($folderConn, $msgNo);
+                            if (!$header) {
+                                continue;
+                            }
+                            $from = '';
+                            if (!empty($header->from[0])) {
+                                $from = ($header->from[0]->mailbox ?? '') . '@' . ($header->from[0]->host ?? '');
+                            }
+                            $spamHints[] = [
+                                'folder' => $name,
+                                'from' => $from,
+                                'subject' => isset($header->subject) ? imap_utf8((string) $header->subject) : null,
+                                'date' => $header->date ?? null,
+                            ];
+                        }
+                    }
                     imap_close($folderConn);
                 }
                 if ($count > 0) {
@@ -497,6 +522,7 @@ class InboundImapService
                 'unseen_total' => $status ? (int) ($status->unseen ?? 0) : 0,
                 'recent_messages' => $recent,
                 'non_empty_folders' => $folders,
+                'spam_recent' => $spamHints,
             ];
         } finally {
             imap_close($connection);
@@ -641,11 +667,17 @@ class InboundImapService
 
     protected function extractHeaderValue(string $rawHeader, string $name): ?string
     {
-        if (!preg_match('/^' . preg_quote($name, '/') . ':\s*((?:.+(?:\r?\n[ \t].+)*)+)/im', $rawHeader, $m)) {
+        // Use [ \t]* (not \s*) after the colon so we never swallow the next header line.
+        // `\s*` would consume the newline after an empty "In-Reply-To:" and wrongly capture "References:".
+        if (!preg_match(
+            '/^' . preg_quote($name, '/') . ':[ \t]*((?:.+?(?:\r?\n[ \t]+.+?)*))?$/im',
+            $rawHeader,
+            $m
+        )) {
             return null;
         }
 
-        $value = preg_replace('/\r?\n[ \t]+/', ' ', trim($m[1])) ?? trim($m[1]);
+        $value = preg_replace('/\r?\n[ \t]+/', ' ', trim($m[1] ?? '')) ?? '';
         return $value !== '' ? $value : null;
     }
 
