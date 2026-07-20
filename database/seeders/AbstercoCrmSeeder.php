@@ -381,20 +381,26 @@ class AbstercoCrmSeeder extends Seeder
     // ------------------------------------------------------------------
     private function outreachTemplates(int $domainId): array
     {
+        $leadOutreachPath = base_path('templates/lead-outreach.json');
+        $leadOutreach = is_file($leadOutreachPath)
+            ? json_decode((string) file_get_contents($leadOutreachPath), true)
+            : null;
+
         return [
             [
                 'domain_id'    => $domainId,
-                'template_key' => 'lead-outreach',
-                'category'     => 'notification',
-                'description'  => 'Staff-composed outreach email to a sales lead (plain body + open tracking pixel)',
-                'subject'      => '{{ $subject }}',
-                'variables'    => [
-                    ['name' => 'subject',             'type' => 'string', 'description' => 'Email subject line',              'required' => true],
-                    ['name' => 'body',                'type' => 'string', 'description' => 'Plain-text message body',         'required' => true],
-                    ['name' => 'tracking_pixel_url',  'type' => 'url',    'description' => 'Open-tracking pixel (injected)',  'required' => false],
+                'template_key' => $leadOutreach['template_key'] ?? 'lead-outreach',
+                'category'     => $leadOutreach['category'] ?? 'notification',
+                'description'  => $leadOutreach['description'] ?? 'Outreach email with booking CTA + tracking pixel',
+                'subject'      => $leadOutreach['subject'] ?? '{{ $subject }}',
+                'variables'    => $leadOutreach['variables'] ?? [
+                    ['name' => 'subject', 'type' => 'string', 'required' => true],
+                    ['name' => 'body', 'type' => 'string', 'required' => true],
+                    ['name' => 'booking_url', 'type' => 'url', 'required' => false],
+                    ['name' => 'tracking_pixel_url', 'type' => 'url', 'required' => false],
                 ],
-                'blade_html' => "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3f3f46;font-size:15px;line-height:1.7}</style></head><body><div>{!! nl2br(e(\$body)) !!}</div>@if(!empty(\$tracking_pixel_url))<img src=\"{{ \$tracking_pixel_url }}\" width=\"1\" height=\"1\" alt=\"\" border=\"0\" style=\"width:1px;height:1px;opacity:0;\" />@endif</body></html>",
-                'status' => 'active',
+                'blade_html'   => $leadOutreach['blade_html'] ?? '',
+                'status'       => $leadOutreach['status'] ?? 'active',
             ],
         ];
     }
