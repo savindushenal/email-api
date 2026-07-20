@@ -4,14 +4,49 @@
   "description": "Staff/n8n outreach email to a sales lead — plain body, book-meeting CTA button, open tracking pixel",
   "subject": "{{ $subject }}",
   "variables": [
-    { "name": "subject", "type": "string", "description": "Email subject line", "required": true },
-    { "name": "body", "type": "string", "description": "Plain-text message body (newlines preserved)", "required": true },
-    { "name": "prospect_name", "type": "string", "description": "Lead first/full name (optional greeting helper)", "required": false },
-    { "name": "sender_name", "type": "string", "description": "Sender display name", "required": false },
-    { "name": "booking_url", "type": "url", "description": "Calendly / meeting booking URL for the CTA button", "required": false },
-    { "name": "booking_label", "type": "string", "description": "CTA button label (default: Book a short call)", "required": false },
-    { "name": "tracking_pixel_url", "type": "url", "description": "Open-tracking pixel URL", "required": false }
+    {
+      "name": "subject",
+      "type": "string",
+      "description": "Email subject line",
+      "required": true
+    },
+    {
+      "name": "body",
+      "type": "string",
+      "description": "Plain-text message body (newlines preserved)",
+      "required": true
+    },
+    {
+      "name": "prospect_name",
+      "type": "string",
+      "description": "Lead first/full name (optional greeting helper)",
+      "required": false
+    },
+    {
+      "name": "sender_name",
+      "type": "string",
+      "description": "Sender display name",
+      "required": false
+    },
+    {
+      "name": "booking_url",
+      "type": "url",
+      "description": "Calendly / meeting booking URL for the CTA button",
+      "required": false
+    },
+    {
+      "name": "booking_label",
+      "type": "string",
+      "description": "CTA button label (default: Book a short call)",
+      "required": false
+    },
+    {
+      "name": "tracking_pixel_url",
+      "type": "url",
+      "description": "Open-tracking pixel URL",
+      "required": false
+    }
   ],
-  "blade_html": "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='X-UA-Compatible' content='IE=edge'><title>{{ $subject }}</title><!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]--></head><body style='margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;'><table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='background:#f4f4f5;'><tr><td align='center' style='padding:24px 12px;'><table role='presentation' width='600' cellpadding='0' cellspacing='0' border='0' style='max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7;'><tr><td style='background:#18181b;padding:22px 28px;'><p style='margin:0;font-size:18px;font-weight:700;color:#84cc16;letter-spacing:-0.02em;'>Absterco</p><p style='margin:4px 0 0;font-size:12px;color:#a1a1aa;'>Outsourced CTO</p></td></tr><tr><td style='padding:28px 28px 8px;color:#3f3f46;font-size:15px;line-height:1.7;'>{!! nl2br(e($body)) !!}</td></tr>@if(!empty($booking_url))<tr><td style='padding:8px 28px 28px;'><table role='presentation' cellpadding='0' cellspacing='0' border='0'><tr><td align='center' bgcolor='#84cc16' style='border-radius:8px;background:#84cc16;'><!--[if mso]><v:roundrect xmlns:v='urn:schemas-microsoft-com:vml' href='{{ $booking_url }}' style='height:44px;v-text-anchor:middle;width:220px;' arcsize='18%' stroke='f' fillcolor='#84cc16'><w:anchorlock/><center style='color:#18181b;font-family:Segoe UI,sans-serif;font-size:15px;font-weight:700;'>{{ !empty($booking_label) ? $booking_label : 'Book a short call' }}</center></v:roundrect><![endif]--><!--[if !mso]><!-- --><a href='{{ $booking_url }}' target='_blank' rel='noopener noreferrer' style='display:inline-block;padding:12px 28px;font-size:15px;font-weight:700;color:#18181b;text-decoration:none;border-radius:8px;background:#84cc16;mso-hide:all;'>{{ !empty($booking_label) ? $booking_label : 'Book a short call' }}</a><!--<![endif]--></td></tr></table><p style='margin:14px 0 0;font-size:12px;line-height:1.5;color:#71717a;'>Or copy this link:<br><a href='{{ $booking_url }}' style='color:#65a30d;word-break:break-all;'>{{ $booking_url }}</a></p></td></tr>@endif<tr><td style='padding:0 28px 24px;border-top:1px solid #f4f4f5;'><p style='margin:16px 0 0;font-size:13px;line-height:1.5;color:#71717a;'>@if(!empty($sender_name)){{ $sender_name }}<br>@endifAbsterco · absterco.com</p></td></tr></table>@if(!empty($tracking_pixel_url))<img src='{{ $tracking_pixel_url }}' width='1' height='1' alt='' border='0' style='display:block;width:1px;height:1px;opacity:0;border:0;' />@endif</td></tr></table></body></html>",
+  "blade_html": "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='X-UA-Compatible' content='IE=edge'><title>{{ $subject }}</title><!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]--></head><body style='margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;'><table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='background:#f4f4f5;'><tr><td align='center' style='padding:24px 12px;'><table role='presentation' width='600' cellpadding='0' cellspacing='0' border='0' style='max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7;'><tr><td style='background:#18181b;padding:22px 28px;'><p style='margin:0;font-size:18px;font-weight:700;color:#84cc16;letter-spacing:-0.02em;'>Absterco</p><p style='margin:4px 0 0;font-size:12px;color:#a1a1aa;'>Outsourced CTO</p></td></tr><tr><td style='padding:28px 28px 8px;color:#3f3f46;font-size:15px;line-height:1.7;'>{!! nl2br(e($body)) !!}</td></tr>@if(!empty($booking_url))<tr><td style='padding:8px 28px 28px;'><table role='presentation' cellpadding='0' cellspacing='0' border='0'><tr><td align='center' bgcolor='#84cc16' style='border-radius:8px;background:#84cc16;'><!--[if mso]><v:roundrect xmlns:v='urn:schemas-microsoft-com:vml' href='{{ $booking_url }}' style='height:44px;v-text-anchor:middle;width:220px;' arcsize='18%' stroke='f' fillcolor='#84cc16'><w:anchorlock/><center style='color:#18181b;font-family:Segoe UI,sans-serif;font-size:15px;font-weight:700;'>{{ !empty($booking_label) ? $booking_label : 'Book a short call' }}</center></v:roundrect><![endif]--><!--[if !mso]><!-- --><a href='{{ $booking_url }}' target='_blank' rel='noopener noreferrer' style='display:inline-block;padding:12px 28px;font-size:15px;font-weight:700;color:#18181b;text-decoration:none;border-radius:8px;background:#84cc16;mso-hide:all;'>{{ !empty($booking_label) ? $booking_label : 'Book a short call' }}</a><!--<![endif]--></td></tr></table><p style='margin:14px 0 0;font-size:12px;line-height:1.5;color:#71717a;'>Or copy this link:<br><a href='{{ $booking_url }}' style='color:#65a30d;word-break:break-all;'>{{ $booking_url }}</a></p></td></tr>@endif<tr><td style='padding:0 28px 24px;border-top:1px solid #f4f4f5;'><p style='margin:16px 0 0;font-size:13px;line-height:1.5;color:#71717a;'>@if(!empty($sender_name)){{ $sender_name }}<br>@endif Absterco · absterco.com</p></td></tr></table>@if(!empty($tracking_pixel_url))<img src='{{ $tracking_pixel_url }}' width='1' height='1' alt='' border='0' style='display:block;width:1px;height:1px;opacity:0;border:0;' />@endif</td></tr></table></body></html>",
   "status": "active"
 }
